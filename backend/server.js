@@ -1,0 +1,30 @@
+// import dotenv from 'dotenv';
+// dotenv.config();
+
+
+import 'dotenv/config'; // 👈 MUST be first, no function call
+
+import express from 'express';
+import bodyParser from 'body-parser';
+
+import connectDB from './config/db.js';
+import voiceRoutes from './routes/voice.js';
+import outboundRoutes from './routes/outbound.js';
+
+
+connectDB();
+
+const app = express();
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+app.use('/voice', voiceRoutes);
+app.use('/outbound', outboundRoutes);
+
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
