@@ -10,6 +10,8 @@ import bodyParser from 'body-parser';
 import connectDB from './config/db.js';
 import voiceRoutes from './routes/voice.js';
 import outboundRoutes from './routes/outbound.js';
+import customerRoutes from "./routes/customer.js";
+
 
 
 connectDB();
@@ -21,6 +23,8 @@ app.use(bodyParser.json());
 
 app.use('/voice', voiceRoutes);
 app.use('/outbound', outboundRoutes);
+app.use("/api/customers", customerRoutes);
+
 
 
 const PORT = process.env.PORT || 3000;

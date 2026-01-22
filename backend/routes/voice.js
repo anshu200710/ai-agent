@@ -1,263 +1,313 @@
-import express from 'express';
-import twilio from 'twilio';
-import Call from '../models/Call.js';
+import express from "express";
+import twilio from "twilio";
+
+import CallSession from "../models/CallSession.js";
+import Customer from "../models/Customer.js";
+import Complaint from "../models/Complaint.js";
 
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-// -----------------------------
-// KEYWORDS
-// -----------------------------
-const TRANSFER_KEYWORDS = ['agent', 'human', 'representative'];
+/* =======================
+   CONSTANTS
+======================= */
+const YES_WORDS = ["haan", "haanji", "yes", "ji", "bilkul", "sahi"];
+const TRANSFER_KEYWORDS = ["agent", "human", "representative"];
 
-const CONFIRM_YES = [
-  'haan', 'haanji', 'ji haan', 'yes',
-  'sahi', 'bilkul', 'theek', 'ok', 'okay'
+const CONFUSION_WORDS = [
+  "kya",
+  "what",
+  "repeat",
+  "dobara",
+  "samajh",
+  "samajh nahi",
+  "clear nahi",
+  "pardon",
+  "haan kya",
+  "matlab",
 ];
 
-const CONFIRM_NO = ['nahi', 'nahin', 'no', 'galat'];
+/* =======================
+   HELPER: ASK & LISTEN
+======================= */
+function ask(twiml, text, call) {
+  if (call) {
+    call.temp.lastQuestion = text;
+  }
 
-// -----------------------------
-// STEP → QUESTION MAP
-// -----------------------------
-const STEP_QUESTIONS = {
-  chassis: 'Kripya chassis number batayein.',
-  owner: 'Kripya malik ya company ka naam batayein.',
-  mobile: 'Kripya mobile number batayein.',
-  location: 'Kripya machine ka location batayein.',
-  engineerBase: 'Kripya nearest engineer base batayein.',
-  complaint: 'Kripya machine ki samasya batayein.',
-  confirm: 'Kya yeh sab details sahi hain? Kripya sirf haan ya nahi boliye.'
-};
+  const gather = twiml.gather({
+    input: "speech",
+    language: "en-IN",
+    speechTimeout: "auto",
+    timeout: 6,
+    action: "/voice/process",
+    method: "POST",
+  });
 
-// ============================
-// INCOMING CALL
-// ============================
-router.post('/', async (req, res) => {
+  gather.say(text);
+}
+
+/* =======================
+   INCOMING CALL
+======================= */
+router.post("/", async (req, res) => {
+  const { CallSid, From } = req.body;
   const twiml = new VoiceResponse();
-  const { CallSid, From, To } = req.body;
 
-  await Call.findOneAndUpdate(
+  await CallSession.findOneAndUpdate(
     { callSid: CallSid },
     {
       callSid: CallSid,
       from: From,
-      to: To,
-      status: 'active',
-      currentStep: 'chassis'
+      step: "ask_chassis",
+      temp: { retries: 0 },
     },
     { upsert: true, new: true }
   );
 
-  const gather = twiml.gather({
-    input: 'speech',
-    language: 'en-IN',
-    enhanced: true,
-    timeout: 6,
-    speechTimeout: 'auto',
-    action: '/voice/process',
-    method: 'POST'
-  });
+  const call = await CallSession.findOne({ callSid: CallSid });
 
-  gather.say(
-    { voice: 'Polly.Aditi', language: 'en-IN' },
-    'Namaskar. Rajesh Motors JCB. Kripya chassis number batayein.'
+  ask(
+    twiml,
+    "Namaskar. Main Rajesh Motors JCB se bol raha hoon. Kripya apni machine ka chassis number boliye.",
+    call
   );
 
-  return res.type('text/xml').send(twiml.toString());
+  res.type("text/xml").send(twiml.toString());
 });
 
-// ============================
-// PROCESS SPEECH
-// ============================
-router.post('/process', async (req, res) => {
-  try {
-    const twiml = new VoiceResponse();
-    const callSid = req.body.CallSid;
-    const userSpeechRaw = (req.body.SpeechResult || '').trim();
-    const userSpeech = userSpeechRaw.toLowerCase();
+/* =======================
+   PROCESS CALL
+======================= */
+router.post("/process", async (req, res) => {
+  const twiml = new VoiceResponse();
+  const { CallSid, SpeechResult } = req.body;
+  const speech = (SpeechResult || "").trim().toLowerCase();
 
-    const call = await Call.findOne({ callSid });
-    if (!call) {
-      twiml.say('System error.');
-      twiml.hangup();
-      return res.type('text/xml').send(twiml.toString());
+  const call = await CallSession.findOne({ callSid: CallSid });
+
+  if (!call || !speech) {
+    ask(twiml, "Awaaz clear nahi aayi. Kripya dobara boliye.", call);
+    return res.type("text/xml").send(twiml.toString());
+  }
+
+  /* 🔁 Transfer to Human */
+  if (TRANSFER_KEYWORDS.some((w) => speech.includes(w))) {
+    twiml.say("Theek hai. Aapko customer care agent se connect kiya ja raha hai.");
+    twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+    return res.type("text/xml").send(twiml.toString());
+  }
+
+  /* 🤔 Confusion Handling */
+  if (
+    CONFUSION_WORDS.some((w) => speech.includes(w)) &&
+    call.temp?.lastQuestion
+  ) {
+    call.temp.retries += 1;
+
+    if (call.temp.retries > 3) {
+      twiml.say("Main aapko agent se connect kar raha hoon.");
+      twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+      return res.type("text/xml").send(twiml.toString());
     }
 
-    // -----------------------------
-    // Silence handling
-    // -----------------------------
-    if (!userSpeech) {
-      const gather = twiml.gather({
-        input: 'speech',
-        language: 'en-IN',
-        action: '/voice/process',
-        method: 'POST'
+    ask(twiml, call.temp.lastQuestion, call);
+    await call.save();
+    return res.type("text/xml").send(twiml.toString());
+  }
+
+  call.temp.retries = 0;
+
+  /* =======================
+     STATE MACHINE
+  ======================= */
+  switch (call.step) {
+    /* ---------- ASK CHASSIS ---------- */
+    case "ask_chassis": {
+      if (speech.length < 4) {
+        ask(
+          twiml,
+          "Chassis number clear nahi mila. Kripya dheere aur saaf boliye.",
+          call
+        );
+        break;
+      }
+
+      call.temp.chassisNo = speech;
+      const customer = await Customer.findOne({ chassisNo: speech });
+
+      if (customer) {
+        call.temp.customerId = customer._id;
+        call.temp.name = customer.name;
+        call.temp.phone = customer.phone;
+        call.temp.city = customer.city;
+        call.step = "ask_complaint";
+
+        ask(
+          twiml,
+          `Dhanyavaad. Record mil gaya hai. Aap ${customer.name} ${customer.city} se bol rahe hain.
+           Ab kripya apni problem batayein.`,
+          call
+        );
+      } else {
+        call.step = "repeat_chassis";
+        ask(
+          twiml,
+          "Is chassis number ka record nahi mila. Kripya chassis number dobara boliye.",
+          call
+        );
+      }
+      break;
+    }
+
+    /* ---------- REPEAT CHASSIS ---------- */
+    case "repeat_chassis": {
+      if (speech.length < 4) {
+        ask(
+          twiml,
+          "Chassis number clear nahi mila. Kripya dobara boliye.",
+          call
+        );
+        break;
+      }
+
+      call.temp.chassisNo = speech;
+      const customer = await Customer.findOne({ chassisNo: speech });
+
+      if (customer) {
+        call.temp.customerId = customer._id;
+        call.temp.name = customer.name;
+        call.temp.phone = customer.phone;
+        call.temp.city = customer.city;
+        call.step = "ask_complaint";
+
+        ask(
+          twiml,
+          "Record mil gaya hai. Kripya apni problem batayein.",
+          call
+        );
+      } else {
+        call.step = "ask_name";
+        ask(
+          twiml,
+          "Record nahi mila. Kripya apna poora naam boliye.",
+          call
+        );
+      }
+      break;
+    }
+
+    /* ---------- ASK NAME ---------- */
+    case "ask_name":
+      call.temp.name = speech;
+      call.step = "ask_phone";
+      ask(
+        twiml,
+        "Dhanyavaad. Ab kripya apna 10 digit mobile number boliye.",
+        call
+      );
+      break;
+
+    /* ---------- ASK PHONE ---------- */
+    case "ask_phone": {
+      call.temp.phone = speech.replace(/\D/g, "");
+
+      if (call.temp.phone.length !== 10) {
+        ask(
+          twiml,
+          "Mobile number sahi nahi lag raha. Kripya sirf 10 digit number boliye.",
+          call
+        );
+        break;
+      }
+
+      const customer = await Customer.findOne({ phone: call.temp.phone });
+
+      if (customer) {
+        call.temp.customerId = customer._id;
+        call.temp.city = customer.city;
+        call.step = "confirm_customer";
+
+        ask(
+          twiml,
+          `Aap ${customer.city} se bol rahe hain. Kya ye sahi hai? yes ya no boliye.`,
+          call
+        );
+      } else {
+        call.step = "ask_city";
+        ask(
+          twiml,
+          "Kripya apne sheher ka naam boliye.",
+          call
+        );
+      }
+      break;
+    }
+
+    /* ---------- CONFIRM CUSTOMER ---------- */
+    case "confirm_customer":
+      if (YES_WORDS.some((w) => speech.includes(w))) {
+        call.step = "ask_complaint";
+        ask(
+          twiml,
+          "Ab kripya apni machine ki problem batayein.",
+          call
+        );
+      } else {
+        call.step = "ask_city";
+        ask(
+          twiml,
+          "Theek hai. Kripya apne sheher ka naam boliye.",
+          call
+        );
+      }
+      break;
+
+    /* ---------- ASK CITY ---------- */
+    case "ask_city":
+      call.temp.city = speech;
+      call.step = "ask_complaint";
+      ask(
+        twiml,
+        "Dhanyavaad. Ab kripya apni problem batayein.",
+        call
+      );
+      break;
+
+    /* ---------- COMPLAINT ---------- */
+    case "ask_complaint": {
+      call.temp.complaint = speech;
+      call.step = "done";
+
+      const customer =
+        call.temp.customerId
+          ? await Customer.findById(call.temp.customerId)
+          : await Customer.create({
+              chassisNo: call.temp.chassisNo,
+              name: call.temp.name,
+              phone: call.temp.phone,
+              city: call.temp.city,
+            });
+
+      await Complaint.create({
+        customerId: customer._id,
+        chassisNo: call.temp.chassisNo,
+        phone: call.temp.phone,
+        description: call.temp.complaint,
+        callSid: CallSid,
+        status: "open",
       });
 
-      gather.say(
-        { voice: 'Polly.Aditi', language: 'en-IN' },
-        'Awaaz clear nahi aayi. Kripya dobara boliye.'
-      );
-
-      return res.type('text/xml').send(twiml.toString());
-    }
-
-    // -----------------------------
-    // Save user message
-    // -----------------------------
-    call.messages.push({ role: 'user', text: userSpeechRaw });
-
-    // -----------------------------
-    // Transfer to human
-    // -----------------------------
-    if (TRANSFER_KEYWORDS.some(k => userSpeech.includes(k))) {
-      call.status = 'transferred';
-      await call.save();
-
-      twiml.say('Aapko human agent se joda ja raha hai.');
-      twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-
-      return res.type('text/xml').send(twiml.toString());
-    }
-
-    // -----------------------------
-    // Ensure serviceDetails exists
-    // -----------------------------
-    if (!call.serviceDetails) {
-      call.serviceDetails = { complaints: [] };
-    }
-    if (!call.serviceDetails.complaints) {
-      call.serviceDetails.complaints = [];
-    }
-
-    // -----------------------------
-    // STATE MACHINE
-    // -----------------------------
-    switch (call.currentStep) {
-      case 'chassis':
-        call.serviceDetails.chassisNumber = userSpeechRaw;
-        call.currentStep = 'owner';
-        break;
-
-      case 'owner':
-        call.serviceDetails.ownerName = userSpeechRaw;
-        call.currentStep = 'mobile';
-        break;
-
-      case 'mobile':
-        call.serviceDetails.mobileNumber = userSpeechRaw;
-        call.currentStep = 'location';
-        break;
-
-      case 'location':
-        call.serviceDetails.machineLocation = userSpeechRaw;
-        call.currentStep = 'engineerBase';
-        break;
-
-      case 'engineerBase':
-        call.serviceDetails.engineerBase = userSpeechRaw;
-        call.currentStep = 'complaint';
-        break;
-
-      case 'complaint':
-        call.serviceDetails.complaints.push(userSpeechRaw);
-        call.currentStep = 'confirm';
-        break;
-
-
-      case 'confirm': {
-  const isYes = CONFIRM_YES.some(w => userSpeech.includes(w));
-  const isNo = CONFIRM_NO.some(w => userSpeech.includes(w));
-
-  if (isYes) {
-    call.confirmation = 'yes';
-    call.currentStep = 'done';
-  } 
-  else if (isNo) {
-    call.confirmation = 'no';
-    call.currentStep = 'complaint';
-  } 
-  else {
-    const gather = twiml.gather({
-      input: 'speech',
-      language: 'en-IN',
-      timeout: 5,
-      speechTimeout: 'auto',
-      action: '/voice/process',
-      method: 'POST'
-    });
-
-    gather.say(
-      { voice: 'Polly.Aditi', language: 'en-IN' },
-      'Kripya sirf haan ya nahi boliye.'
-    );
-
-    await call.save();
-    return res.type('text/xml').send(twiml.toString());
-  }
-  break;
-}
-
-    }
-
-    // -----------------------------
-    // END CALL (FINAL – ONCE ONLY)
-    // -----------------------------
-    if (call.currentStep === 'done') {
-      call.status = 'ended';
-      await call.save();
-
       twiml.say(
-        { voice: 'Polly.Aditi', language: 'en-IN' },
-        'Aapki request confirm kar li gayi hai.'
+        "Dhanyavaad. Aapki complaint register ho chuki hai. Hamari service team jald hi aapse sampark karegi."
       );
-
-      twiml.say(
-        { voice: 'Polly.Aditi', language: 'en-IN' },
-        'Dhanyavaad. Aapki service request register ho gayi hai.'
-      );
-
-        twiml.pause({ length: 1 });
-
-
       twiml.hangup();
-      return res.type('text/xml').send(twiml.toString());
+      break;
     }
-
-    // -----------------------------
-    // ASK NEXT QUESTION
-    // -----------------------------
-    const question = STEP_QUESTIONS[call.currentStep];
-    call.messages.push({ role: 'ai', text: question });
-    await call.save();
-
-    const gather = twiml.gather({
-      input: 'speech',
-      language: 'en-IN',
-      enhanced: true,
-      timeout: 6,
-      speechTimeout: 'auto',
-      action: '/voice/process',
-      method: 'POST'
-    });
-
-    gather.say(
-      { voice: 'Polly.Aditi', language: 'en-IN' },
-      question
-    );
-
-    return res.type('text/xml').send(twiml.toString());
-
-  } catch (error) {
-    console.error('VOICE ERROR:', error);
-
-    const twiml = new VoiceResponse();
-    twiml.say('System error ho gaya.');
-    twiml.hangup();
-
-    return res.type('text/xml').send(twiml.toString());
   }
+
+  await call.save();
+  res.type("text/xml").send(twiml.toString());
 });
 
 export default router;
