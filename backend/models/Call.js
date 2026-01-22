@@ -71,6 +71,13 @@ const CallSchema = new mongoose.Schema({
     default: 'chassis'
   },
 
+  confirmation: {
+  type: String,
+  enum: ['yes', 'no'],
+  default: null
+},
+
+
   messages: [MessageSchema],
   serviceDetails: {
     type: ServiceDetailsSchema,

@@ -204,7 +204,17 @@ import Call from '../models/Call.js';
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+// -----------------------------
+// KEYWORDS
+// -----------------------------
 const TRANSFER_KEYWORDS = ['agent', 'human', 'representative'];
+
+const CONFIRM_YES = [
+  'haan', 'haanji', 'ji haan', 'yes',
+  'sahi', 'bilkul', 'theek', 'ok', 'okay'
+];
+
+const CONFIRM_NO = ['nahi', 'nahin', 'no', 'galat'];
 
 // -----------------------------
 // STEP → QUESTION MAP
@@ -216,7 +226,7 @@ const STEP_QUESTIONS = {
   location: 'Kripya machine ka location batayein.',
   engineerBase: 'Kripya nearest engineer base batayein.',
   complaint: 'Kripya machine ki samasya batayein.',
-  confirm: 'Kya yeh sab details sahi hain? Haan ya nahi boliye.'
+  confirm: 'Kya yeh sab details sahi hain? Kripya sirf haan ya nahi boliye.'
 };
 
 // ============================
@@ -263,7 +273,8 @@ router.post('/process', async (req, res) => {
   try {
     const twiml = new VoiceResponse();
     const callSid = req.body.CallSid;
-    const userSpeech = (req.body.SpeechResult || '').trim().toLowerCase();
+    const userSpeechRaw = (req.body.SpeechResult || '').trim();
+    const userSpeech = userSpeechRaw.toLowerCase();
 
     const call = await Call.findOne({ callSid });
     if (!call) {
@@ -273,7 +284,7 @@ router.post('/process', async (req, res) => {
     }
 
     // -----------------------------
-    // Silence retry
+    // Silence handling
     // -----------------------------
     if (!userSpeech) {
       const gather = twiml.gather({
@@ -294,7 +305,7 @@ router.post('/process', async (req, res) => {
     // -----------------------------
     // Save user message
     // -----------------------------
-    call.messages.push({ role: 'user', text: userSpeech });
+    call.messages.push({ role: 'user', text: userSpeechRaw });
 
     // -----------------------------
     // Transfer to human
@@ -320,50 +331,98 @@ router.post('/process', async (req, res) => {
     }
 
     // -----------------------------
-    // STEP HANDLING (STATE MACHINE)
+    // STATE MACHINE
     // -----------------------------
     switch (call.currentStep) {
       case 'chassis':
-        call.serviceDetails.chassisNumber = userSpeech;
+        call.serviceDetails.chassisNumber = userSpeechRaw;
         call.currentStep = 'owner';
         break;
 
       case 'owner':
-        call.serviceDetails.ownerName = userSpeech;
+        call.serviceDetails.ownerName = userSpeechRaw;
         call.currentStep = 'mobile';
         break;
 
       case 'mobile':
-        call.serviceDetails.mobileNumber = userSpeech;
+        call.serviceDetails.mobileNumber = userSpeechRaw;
         call.currentStep = 'location';
         break;
 
       case 'location':
-        call.serviceDetails.machineLocation = userSpeech;
+        call.serviceDetails.machineLocation = userSpeechRaw;
         call.currentStep = 'engineerBase';
         break;
 
       case 'engineerBase':
-        call.serviceDetails.engineerBase = userSpeech;
+        call.serviceDetails.engineerBase = userSpeechRaw;
         call.currentStep = 'complaint';
         break;
 
       case 'complaint':
-        call.serviceDetails.complaints.push(userSpeech);
+        call.serviceDetails.complaints.push(userSpeechRaw);
         call.currentStep = 'confirm';
         break;
 
-      case 'confirm':
-        if (userSpeech.includes('haan') || userSpeech.includes('yes')) {
-          call.currentStep = 'done';
-        } else {
-          call.currentStep = 'complaint';
-        }
-        break;
+      // case 'confirm':
+      //   if (CONFIRM_YES.some(w => userSpeech.includes(w))) {
+      //     call.currentStep = 'done';
+      //   } else if (CONFIRM_NO.some(w => userSpeech.includes(w))) {
+      //     call.currentStep = 'complaint';
+      //   } else {
+      //     const gather = twiml.gather({
+      //       input: 'speech',
+      //       language: 'en-IN',
+      //       action: '/voice/process',
+      //       method: 'POST'
+      //     });
+
+      //     gather.say(
+      //       { voice: 'Polly.Aditi', language: 'en-IN' },
+      //       'Kripya sirf haan ya nahi boliye.'
+      //     );
+
+      //     return res.type('text/xml').send(twiml.toString());
+      //   }
+      //   break;
+
+      case 'confirm': {
+  const isYes = CONFIRM_YES.some(w => userSpeech.includes(w));
+  const isNo = CONFIRM_NO.some(w => userSpeech.includes(w));
+
+  if (isYes) {
+    call.confirmation = 'yes';
+    call.currentStep = 'done';
+  } 
+  else if (isNo) {
+    call.confirmation = 'no';
+    call.currentStep = 'complaint';
+  } 
+  else {
+    const gather = twiml.gather({
+      input: 'speech',
+      language: 'en-IN',
+      timeout: 5,
+      speechTimeout: 'auto',
+      action: '/voice/process',
+      method: 'POST'
+    });
+
+    gather.say(
+      { voice: 'Polly.Aditi', language: 'en-IN' },
+      'Kripya sirf haan ya nahi boliye.'
+    );
+
+    await call.save();
+    return res.type('text/xml').send(twiml.toString());
+  }
+  break;
+}
+
     }
 
     // -----------------------------
-    // END CALL
+    // END CALL (FINAL – ONCE ONLY)
     // -----------------------------
     if (call.currentStep === 'done') {
       call.status = 'ended';
@@ -371,10 +430,18 @@ router.post('/process', async (req, res) => {
 
       twiml.say(
         { voice: 'Polly.Aditi', language: 'en-IN' },
+        'Aapki request confirm kar li gayi hai.'
+      );
+
+      twiml.say(
+        { voice: 'Polly.Aditi', language: 'en-IN' },
         'Dhanyavaad. Aapki service request register ho gayi hai.'
       );
-      twiml.hangup();
 
+        twiml.pause({ length: 1 });
+
+
+      twiml.hangup();
       return res.type('text/xml').send(twiml.toString());
     }
 
@@ -383,7 +450,6 @@ router.post('/process', async (req, res) => {
     // -----------------------------
     const question = STEP_QUESTIONS[call.currentStep];
     call.messages.push({ role: 'ai', text: question });
-
     await call.save();
 
     const gather = twiml.gather({

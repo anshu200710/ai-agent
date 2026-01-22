@@ -10,7 +10,7 @@ const connectDB = async () => {
     //   family: 4
     // });
 
-    console.log('✅ MongoDB Atlas connected (NON-SRV)');
+    console.log('✅ MongoDB Atlas connected');
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
     process.exit(1);
