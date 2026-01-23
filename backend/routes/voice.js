@@ -9,6 +9,20 @@ const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
 /* =======================
+   FOR CLEAN PRONOUN SAVE
+======================= */
+
+function cleanSpeech(text) {
+  if (!text) return "";
+
+  return text
+    .replace(/[।]/g, "") // remove Hindi full stop
+    .replace(/[.,!?]/g, "") // remove English punctuation
+    .trim()
+    .toLowerCase();
+}
+
+/* =======================
    CONSTANTS
 ======================= */
 const YES_WORDS = ["haan", "haanji", "yes", "ji", "bilkul", "sahi"];
@@ -37,14 +51,22 @@ function ask(twiml, text, call) {
 
   const gather = twiml.gather({
     input: "speech",
-    language: "en-IN",
+    language: "hi-IN",
     speechTimeout: "auto",
     timeout: 6,
     action: "/voice/process",
     method: "POST",
   });
 
-  gather.say(text);
+  // gather.say(text);
+
+  gather.say(
+    {
+      voice: "Polly.Aditi",
+      language: "hi-IN",
+    },
+    text,
+  );
 }
 
 /* =======================
@@ -62,7 +84,7 @@ router.post("/", async (req, res) => {
       step: "ask_chassis",
       temp: { retries: 0 },
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true },
   );
 
   const call = await CallSession.findOne({ callSid: CallSid });
@@ -70,7 +92,7 @@ router.post("/", async (req, res) => {
   ask(
     twiml,
     "Namaskar. Main Rajesh Motors JCB se bol raha hoon. Kripya apni machine ka chassis number boliye.",
-    call
+    call,
   );
 
   res.type("text/xml").send(twiml.toString());
@@ -82,7 +104,9 @@ router.post("/", async (req, res) => {
 router.post("/process", async (req, res) => {
   const twiml = new VoiceResponse();
   const { CallSid, SpeechResult } = req.body;
-  const speech = (SpeechResult || "").trim().toLowerCase();
+  const rawSpeech = SpeechResult || "";
+  const speech = cleanSpeech(rawSpeech);
+  // const speech = (SpeechResult || "").trim().toLowerCase();
 
   const call = await CallSession.findOne({ callSid: CallSid });
 
@@ -93,7 +117,9 @@ router.post("/process", async (req, res) => {
 
   /* 🔁 Transfer to Human */
   if (TRANSFER_KEYWORDS.some((w) => speech.includes(w))) {
-    twiml.say("Theek hai. Aapko customer care agent se connect kiya ja raha hai.");
+    twiml.say(
+      "Theek hai. Aapko customer care agent se connect kiya ja raha hai.",
+    );
     twiml.dial(process.env.HUMAN_AGENT_NUMBER);
     return res.type("text/xml").send(twiml.toString());
   }
@@ -128,7 +154,7 @@ router.post("/process", async (req, res) => {
         ask(
           twiml,
           "Chassis number clear nahi mila. Kripya dheere aur saaf boliye.",
-          call
+          call,
         );
         break;
       }
@@ -147,14 +173,16 @@ router.post("/process", async (req, res) => {
           twiml,
           `Dhanyavaad. Record mil gaya hai. Aap ${customer.name} ${customer.city} se bol rahe hain.
            Ab kripya apni problem batayein.`,
-          call
+          call,
         );
       } else {
         call.step = "repeat_chassis";
         ask(
           twiml,
-          "Is chassis number ka record nahi mila. Kripya chassis number dobara boliye.",
-          call
+          `Dhanyavaad. Record mil gaya hai. 
+   Aap ${customer.name} ${customer.city} se bol rahe hain.
+   Ab kripya apni problem batayein.`,
+          call,
         );
       }
       break;
@@ -166,7 +194,7 @@ router.post("/process", async (req, res) => {
         ask(
           twiml,
           "Chassis number clear nahi mila. Kripya dobara boliye.",
-          call
+          call,
         );
         break;
       }
@@ -181,18 +209,10 @@ router.post("/process", async (req, res) => {
         call.temp.city = customer.city;
         call.step = "ask_complaint";
 
-        ask(
-          twiml,
-          "Record mil gaya hai. Kripya apni problem batayein.",
-          call
-        );
+        ask(twiml, "Record mil gaya hai. Kripya apni problem batayein.", call);
       } else {
         call.step = "ask_name";
-        ask(
-          twiml,
-          "Record nahi mila. Kripya apna poora naam boliye.",
-          call
-        );
+        ask(twiml, "Record nahi mila. Kripya apna poora naam boliye.", call);
       }
       break;
     }
@@ -204,7 +224,7 @@ router.post("/process", async (req, res) => {
       ask(
         twiml,
         "Dhanyavaad. Ab kripya apna 10 digit mobile number boliye.",
-        call
+        call,
       );
       break;
 
@@ -216,7 +236,7 @@ router.post("/process", async (req, res) => {
         ask(
           twiml,
           "Mobile number sahi nahi lag raha. Kripya sirf 10 digit number boliye.",
-          call
+          call,
         );
         break;
       }
@@ -231,15 +251,11 @@ router.post("/process", async (req, res) => {
         ask(
           twiml,
           `Aap ${customer.city} se bol rahe hain. Kya ye sahi hai? yes ya no boliye.`,
-          call
+          call,
         );
       } else {
         call.step = "ask_city";
-        ask(
-          twiml,
-          "Kripya apne sheher ka naam boliye.",
-          call
-        );
+        ask(twiml, "Kripya apne sheher ka naam boliye.", call);
       }
       break;
     }
@@ -248,18 +264,10 @@ router.post("/process", async (req, res) => {
     case "confirm_customer":
       if (YES_WORDS.some((w) => speech.includes(w))) {
         call.step = "ask_complaint";
-        ask(
-          twiml,
-          "Ab kripya apni machine ki problem batayein.",
-          call
-        );
+        ask(twiml, "Ab kripya apni machine ki problem batayein.", call);
       } else {
         call.step = "ask_city";
-        ask(
-          twiml,
-          "Theek hai. Kripya apne sheher ka naam boliye.",
-          call
-        );
+        ask(twiml, "Theek hai. Kripya apne sheher ka naam boliye.", call);
       }
       break;
 
@@ -267,11 +275,7 @@ router.post("/process", async (req, res) => {
     case "ask_city":
       call.temp.city = speech;
       call.step = "ask_complaint";
-      ask(
-        twiml,
-        "Dhanyavaad. Ab kripya apni problem batayein.",
-        call
-      );
+      ask(twiml, "Dhanyavaad. Ab kripya apni problem batayein.", call);
       break;
 
     /* ---------- COMPLAINT ---------- */
@@ -279,15 +283,14 @@ router.post("/process", async (req, res) => {
       call.temp.complaint = speech;
       call.step = "done";
 
-      const customer =
-        call.temp.customerId
-          ? await Customer.findById(call.temp.customerId)
-          : await Customer.create({
-              chassisNo: call.temp.chassisNo,
-              name: call.temp.name,
-              phone: call.temp.phone,
-              city: call.temp.city,
-            });
+      const customer = call.temp.customerId
+        ? await Customer.findById(call.temp.customerId)
+        : await Customer.create({
+            chassisNo: call.temp.chassisNo,
+            name: call.temp.name,
+            phone: call.temp.phone,
+            city: call.temp.city,
+          });
 
       await Complaint.create({
         customerId: customer._id,
@@ -299,7 +302,7 @@ router.post("/process", async (req, res) => {
       });
 
       twiml.say(
-        "Dhanyavaad. Aapki complaint register ho chuki hai. Hamari service team jald hi aapse sampark karegi."
+        "Dhanyavaad. Aapki complaint register ho chuki hai. Hamari service team jald hi aapse sampark karegi.",
       );
       twiml.hangup();
       break;
