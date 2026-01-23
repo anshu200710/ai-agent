@@ -24,6 +24,8 @@ app.use(bodyParser.json());
 app.use('/voice', voiceRoutes);
 app.use('/outbound', outboundRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/audio", express.static("public/audio"));
+
 
 
 

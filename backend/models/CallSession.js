@@ -9,6 +9,7 @@ const CallSessionSchema = new mongoose.Schema({
     enum: [
       'ask_chassis',
       'repeat_chassis',
+      "unregistered_options", 
       'ask_name',
       'ask_phone',
       'confirm_customer',
