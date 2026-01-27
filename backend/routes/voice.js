@@ -249,7 +249,7 @@ router.post("/process", async (req, res) => {
 
         ask(
           twiml,
-          `Aap ${customer.city} se bol rahe hain. Kya ye sahi hai? yes ya no boliye.`,
+          `Aap ${customer.name} se bol rahe hain. Kya ye sahi hai? yes ya no boliye.`,
           call,
         );
       } else {
@@ -313,6 +313,14 @@ router.post("/process", async (req, res) => {
 });
 
 export default router;
+
+
+
+
+
+/* =======================
+   Even Labs added for clear voice
+======================= */
 
 // import express from "express";
 // import twilio from "twilio";
