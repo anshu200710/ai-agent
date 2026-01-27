@@ -179,12 +179,11 @@ router.post("/process", async (req, res) => {
         call.step = "repeat_chassis";
         ask(
           twiml,
-          `Dhanyavaad. Record mil gaya hai.
-   Aap ${customer.name} ${customer.city} se bol rahe hain.
-   Ab kripya apni problem batayein.`,
+          "Record nahi mila. Kripya chassis number dobara boliye.",
           call,
         );
       }
+
       break;
     }
 
@@ -314,18 +313,6 @@ router.post("/process", async (req, res) => {
 });
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-
-
 
 // import express from "express";
 // import twilio from "twilio";
