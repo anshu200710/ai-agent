@@ -21,6 +21,10 @@ const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+// THIS LINE IS MUST FOR TWILIO
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+
 app.use('/voice', voiceRoutes);
 app.use('/outbound', outboundRoutes);
 app.use("/api/customers", customerRoutes);

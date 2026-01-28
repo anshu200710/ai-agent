@@ -1,50 +1,56 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-export const getAIResponse = async (conversation) => {
-  const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+export async function analyzeSpeech({ text, step }) {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+    });
 
-  const systemPrompt = `
-You are a JCB customer support call agent for Rajesh Motors.
+    const prompt = `
+You are a voice-call AI for an Indian service center.
 
-Language:
-- Speak in polite Hindi-English mix.
-- Short, clear sentences.
+User said: "${text}"
+Current step: "${step}"
 
-Your job:
-- Register machine service complaints.
-- Ask questions one by one.
-- Do not explain anything extra.
+Return ONLY JSON (no markdown, no explanation):
 
-Conversation flow:
-1. Greet the customer.
-2. Ask for chassis number.
-3. Confirm owner or company name.
-4. Ask for mobile number.
-5. Ask machine location.
-6. Ask engineer base location.
-7. Ask complaint details.
-8. Ask if there is any other problem.
-9. Close the call politely.
+{
+  "confidence": "CLEAR or LOW",
+  "intent": "PHONE | CHASSIS | COMPLAINT | UNKNOWN",
+  "value": "extracted value or full complaint",
+  "reply": "short Hindi reply"
+}
 
 Rules:
-- Never ask two questions at once.
-- Never speak more than 2 sentences.
-- If user is confused, ask one clarification.
-- If user asks something unrelated, redirect to complaint process.
-- If user says agent/human, immediately transfer.
-
-End every call politely.
+- PHONE = exactly 10 digits
+- CHASSIS = alphanumeric
+- If unclear → confidence LOW
 `;
 
+    const result = await model.generateContent(prompt);
+    let raw = result.response.text().trim();
 
-  const history = conversation
-    .map(m => `${m.role}: ${m.text}`)
-    .join('\n');
+    // 🔥 CRITICAL FIX — strip markdown if Gemini adds it
+    raw = raw.replace(/```json|```/g, "").trim();
 
-  const prompt = `${systemPrompt}\nConversation:\n${history}\nAI:`;
+    const json = JSON.parse(raw);
 
-  const result = await model.generateContent(prompt);
-  return result.response.text().trim();
-};
+    return {
+      confidence: json.confidence || "LOW",
+      intent: json.intent || "UNKNOWN",
+      value: json.value || "",
+      reply: json.reply || "Kripya dobara boliye.",
+    };
+  } catch (err) {
+    console.error("Gemini error:", err.message);
+
+    return {
+      confidence: "LOW",
+      intent: "UNKNOWN",
+      value: "",
+      reply: "Main samajh nahi paaya. Kripya dobara boliye.",
+    };
+  }
+}
