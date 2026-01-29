@@ -39,7 +39,6 @@
 
 // export default mongoose.model('Complaint', ComplaintSchema);
 
-
 import mongoose from "mongoose";
 
 const ComplaintSchema = new mongoose.Schema(
@@ -47,12 +46,12 @@ const ComplaintSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      required: true,
+      default: null,
     },
 
     chassisNo: {
       type: String,
-      required: true,
+      default: "Unknown",
     },
 
     phone: {
@@ -60,27 +59,24 @@ const ComplaintSchema = new mongoose.Schema(
       required: true,
     },
 
-    name: {
+    customerName: {
       type: String,
-      required: true,
+      default: "Unknown",
     },
 
-    city: {
+    contactPersonName: {
       type: String,
-      required: true,
+      default: "Unknown",
     },
 
-    machineModel: {
+    machineLocation: {
       type: String,
+      default: "Unknown",
     },
 
-    warrantyStatus: {
+    description_raw: {
       type: String,
-    },
-
-    description: {
-      type: String,
-      required: true,
+      default: "Not provided by caller",
     },
 
     callSid: {
@@ -92,6 +88,11 @@ const ComplaintSchema = new mongoose.Schema(
       type: String,
       enum: ["open", "assigned", "resolved"],
       default: "open",
+    },
+
+    source: {
+      type: String,
+      default: "IVR_VOICE_BOT",
     },
   },
   { timestamps: true }

@@ -1,7 +1,3 @@
-/* =======================
-Ai Agent add to work properly
-======================= */
-
 import express from "express";
 import twilio from "twilio";
 
@@ -12,7 +8,6 @@ import Complaint from "../models/Complaint.js";
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-
 /* =======================
    CLEAN SPEECH
 ======================= */
@@ -22,21 +17,7 @@ function cleanSpeech(text) {
 }
 
 /* =======================
-   CONSTANTS
-======================= */
-const TRANSFER_KEYWORDS = ["agent", "human", "representative"];
-const CONFUSION_WORDS = [
-  "kya",
-  "repeat",
-  "dobara",
-  "samajh",
-  "samajh nahi",
-  "clear nahi",
-  "pardon",
-];
-
-/* =======================
-   ASK + LISTEN
+   ASK WITH GATHER
 ======================= */
 function ask(twiml, text, call) {
   call.temp.lastQuestion = text;
@@ -65,18 +46,23 @@ router.post("/", async (req, res) => {
     {
       callSid: CallSid,
       from: From,
-      step: "ask_identifier",
-      temp: { retries: 0 },
+      step: "ivr_menu",
+      temp: {},
     },
     { upsert: true, new: true }
   );
 
-  const call = await CallSession.findOne({ callSid: CallSid });
+  const gather = twiml.gather({
+    input: "dtmf",
+    numDigits: 1,
+    timeout: 5,
+    action: "/voice/process",
+    method: "POST",
+  });
 
-  ask(
-    twiml,
-    "Welcome to Rajesh JCB Motors. Apni problem register karne ke liye kripya apna registered mobile number ya apna chassis number boliye.",
-    call
+  gather.say(
+    { voice: "Polly.Aditi", language: "hi-IN" },
+    "Complaint register karne ke liye ek dabayein. Human agent se baat karne ke liye do dabayein."
   );
 
   res.type("text/xml").send(twiml.toString());
@@ -87,61 +73,51 @@ router.post("/", async (req, res) => {
 ======================= */
 router.post("/process", async (req, res) => {
   const twiml = new VoiceResponse();
-  const { CallSid, SpeechResult } = req.body;
+  const { CallSid, Digits, SpeechResult } = req.body;
 
-  const speech = cleanSpeech(SpeechResult || "");
   const call = await CallSession.findOne({ callSid: CallSid });
-
   if (!call) {
-  twiml.say("Technical error. Call disconnect ho raha hai.");
-  twiml.hangup();
-  return res.type("text/xml").send(twiml.toString());
-}
-
-if (!speech) {
-  call.temp.retries += 1;
-
-  if (call.temp.retries >= 2) {
-    twiml.say("Awaaz clear nahi aa rahi. Hum aapko agent se jod rahe hain.");
-    twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-    await call.save();
+    twiml.say("Technical error.");
+    twiml.hangup();
     return res.type("text/xml").send(twiml.toString());
   }
 
-  ask(
-  twiml,
-  "Hume aapka record nahi mila. Shayad number clear nahi tha. Kripya dheere aur saaf boliye. Aap registered mobile number ya chassis number bata sakte hain.",
-  call
-);
-
-  await call.save();
-  return res.type("text/xml").send(twiml.toString());
-}
-
-
-  /* 🔁 MANUAL TRANSFER */
-  if (TRANSFER_KEYWORDS.some((w) => speech.includes(w))) {
-    twiml.say("Aapko agent se connect kiya ja raha hai.");
-    twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-    return res.type("text/xml").send(twiml.toString());
-  }
-
-  /* 🤔 CONFUSION HANDLING */
-  if (CONFUSION_WORDS.some((w) => speech.includes(w))) {
-    call.temp.retries += 1;
-
-    if (call.temp.retries > 2) {
+  /* =======================
+     IVR MENU
+  ======================= */
+  if (call.step === "ivr_menu") {
+    if (Digits === "2") {
       twiml.say("Aapko agent se connect kiya ja raha hai.");
       twiml.dial(process.env.HUMAN_AGENT_NUMBER);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    ask(twiml, call.temp.lastQuestion, call);
+    if (Digits === "1") {
+      call.step = "ask_identifier";
+      ask(
+        twiml,
+        "Kripya apni machine ka chassis number ya registered mobile number boliye.",
+        call
+      );
+      await call.save();
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    ask(twiml, "Kripya ek ya do dabayein.", call);
     await call.save();
     return res.type("text/xml").send(twiml.toString());
   }
 
-  call.temp.retries = 0;
+  /* =======================
+     SPEECH HANDLING
+  ======================= */
+  const speech = cleanSpeech(SpeechResult || "");
+
+  if (!speech) {
+    ask(twiml, call.temp.lastQuestion, call);
+    await call.save();
+    return res.type("text/xml").send(twiml.toString());
+  }
 
   /* =======================
      STATE MACHINE
@@ -161,14 +137,6 @@ if (!speech) {
       }
 
       if (!customer) {
-        call.temp.retries += 1;
-
-        if (call.temp.retries > 2) {
-          twiml.say("Record nahi mila. Aapko agent se connect kiya ja raha hai.");
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
         ask(
           twiml,
           "Record nahi mila. Kripya chassis number ya registered mobile number dobara boliye.",
@@ -178,15 +146,25 @@ if (!speech) {
       }
 
       call.temp.customerId = customer._id;
-      call.step = "ask_complaint";
+      call.step = "ask_machine_location";
 
-      ask(
-        twiml,
-        `Aapka record mil gaya hai. Aap ${customer.city} se ${customer.name} baat kar rahe hain. Kripya apni Machine Ki Problem batayein.`,
-        call
-      );
+      ask(twiml, `Aapka record mil gya aap ${customer.city} se ${customer.name} bol rahe hai.  Machine kis location par hai?`, call);
       break;
     }
+
+    /* ---------- LOCATION ---------- */
+    case "ask_machine_location":
+      call.temp.machineLocation = speech;
+      call.step = "ask_contact_name";
+      ask(twiml, "Contact person ka naam batayein.", call);
+      break;
+
+    /* ---------- CONTACT NAME ---------- */
+    case "ask_contact_name":
+      call.temp.contactName = speech;
+      call.step = "ask_complaint";
+      ask(twiml, "Machine ki complaint batayein.", call);
+      break;
 
     /* ---------- COMPLAINT ---------- */
     case "ask_complaint": {
@@ -196,16 +174,16 @@ if (!speech) {
         customerId: customer._id,
         chassisNo: customer.chassisNo,
         phone: customer.phone,
-        name: customer.name,
-        city: customer.city,
-        machineModel: customer.machineModel,
-        warrantyStatus: customer.warrantyStatus,
+        customerName: customer.name,
+        machineLocation: call.temp.machineLocation,
+        contactPersonName: call.temp.contactName,
         description: speech,
         callSid: CallSid,
+        source: "IVR_VOICE_BOT",
       });
 
       twiml.say(
-        "Dhanyavaad. Aapki complaint register ho chuki hai. Hamari service team jald hi aapse sampark karegi."
+        "Dhanyavaad. Aapki complaint register ho gayi hai. Hamari team jald hi aapse sampark karegi."
       );
       twiml.hangup();
       break;
@@ -217,22 +195,6 @@ if (!speech) {
 });
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -442,19 +404,3 @@ export default router;
 // });
 
 // export default router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

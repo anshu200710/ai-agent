@@ -48,11 +48,14 @@ const CallSessionSchema = new mongoose.Schema(
     step: {
       type: String,
       enum: [
-        "ask_identifier",   // chassis OR phone
+        "ivr_menu",
+        "ask_identifier",
+        "ask_machine_location",
+        "ask_contact_name",
         "ask_complaint",
-        "done"
+        "done",
       ],
-      default: "ask_identifier",
+      default: "ivr_menu",
     },
 
     temp: {
@@ -68,8 +71,9 @@ const CallSessionSchema = new mongoose.Schema(
         ref: "Customer",
       },
 
-      // optional (for debugging / logs)
-      identifierSpoken: String,
+      identifierRaw: String,
+      machineLocation: String,
+      contactName: String,
     },
   },
   { timestamps: true }
