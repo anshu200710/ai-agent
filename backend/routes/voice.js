@@ -13,7 +13,55 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 ======================= */
 function cleanSpeech(text) {
   if (!text) return "";
-  return text.replace(/[।.,!?]/g, "").trim().toLowerCase();
+  return text
+    .replace(/[।.,!?]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+/* =======================
+    Hindi Numaber
+======================= */
+const hindiNumberMap = {
+  shunya: "0",
+  zero: "0",
+  ek: "1",
+  do: "2",
+  teen: "3",
+  char: "4",
+  paanch: "5",
+  chhe: "6",
+  chaar: "4",
+  panch: "5",
+  che: "6",
+  saat: "7",
+  aath: "8",
+  nau: "9",
+};
+
+function wordsToDigits(text) {
+  let result = "";
+  text.split(" ").forEach((word) => {
+    if (hindiNumberMap[word]) {
+      result += hindiNumberMap[word];
+    }
+  });
+  return result;
+}
+
+/* =======================
+    Repeat Question
+======================= */
+function isConfusedSpeech(text) {
+  const confusionWords = [
+    "kya",
+    "repeat",
+    "dobara",
+    "samajh nahi aaya",
+    "samajh nahi",
+    "fir se",
+  ];
+  return confusionWords.some((word) => text.includes(word));
 }
 
 /* =======================
@@ -27,6 +75,7 @@ function ask(twiml, text, call) {
     language: "hi-IN",
     speechTimeout: "auto",
     timeout: 6,
+    actionOnEmptyResult: true,
     action: "/voice/process",
     method: "POST",
   });
@@ -47,9 +96,11 @@ router.post("/", async (req, res) => {
       callSid: CallSid,
       from: From,
       step: "ivr_menu",
-      temp: {},
+      temp: {
+        retries: 0,
+      },
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true },
   );
 
   const gather = twiml.gather({
@@ -62,7 +113,7 @@ router.post("/", async (req, res) => {
 
   gather.say(
     { voice: "Polly.Aditi", language: "hi-IN" },
-    "Complaint register karne ke liye ek dabayein. Human agent se baat karne ke liye do dabayein."
+    "Complaint register karne ke liye ek dabayein. Human agent se baat karne ke liye do dabayein.",
   );
 
   res.type("text/xml").send(twiml.toString());
@@ -96,8 +147,8 @@ router.post("/process", async (req, res) => {
       call.step = "ask_identifier";
       ask(
         twiml,
-        "Kripya apni machine ka chassis number ya registered mobile number boliye.",
-        call
+        " Welcome to Rajesh JCB motors,  Kripya apni machine ka chassis number ya registered mobile number boliye.",
+        call,
       );
       await call.save();
       return res.type("text/xml").send(twiml.toString());
@@ -113,7 +164,23 @@ router.post("/process", async (req, res) => {
   ======================= */
   const speech = cleanSpeech(SpeechResult || "");
 
+  if (speech.length < 6 && isConfusedSpeech(speech)) {
+    ask(twiml, call.temp.lastQuestion, call);
+    await call.save();
+    return res.type("text/xml").send(twiml.toString());
+  }
+
   if (!speech) {
+    call.temp.retries = (call.temp.retries || 0) + 1;
+
+    if (call.temp.retries >= 3) {
+      twiml.say(
+        "Humein aawaz sunai nahi de rahi. Aapko agent se connect kiya ja raha hai.",
+      );
+      twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
     ask(twiml, call.temp.lastQuestion, call);
     await call.save();
     return res.type("text/xml").send(twiml.toString());
@@ -125,35 +192,68 @@ router.post("/process", async (req, res) => {
   switch (call.step) {
     /* ---------- IDENTIFIER ---------- */
     case "ask_identifier": {
-      const digits = speech.replace(/\D/g, "");
-      let customer = null;
+      let digits = speech.replace(/\D/g, "");
 
+      if (digits.length < 10) {
+        const wordDigits = wordsToDigits(speech);
+        if (wordDigits.length >= 10) {
+          digits = wordDigits;
+        }
+      }
+
+      let customer = null;
+      const normalizedSpeech = speech.replace(/\s+/g, "").toUpperCase();
+
+      // 1️⃣ Try phone number first
       if (digits.length === 10) {
         customer = await Customer.findOne({ phone: digits });
       }
-
+      
+      // 2️⃣ If not found, try chassis number
       if (!customer) {
-        customer = await Customer.findOne({ chassisNo: speech });
+        customer = await Customer.findOne({ chassisNo: normalizedSpeech });
       }
+      
 
       if (!customer) {
+        call.temp.retries = (call.temp.retries || 0) + 1;
+
+        // After 3 failed attempts → human agent
+        if (call.temp.retries >= 3) {
+          twiml.say(
+            { voice: "Polly.Aditi", language: "hi-IN" },
+            "Humein details verify nahi ho pa rahi. Aapko agent se connect kiya ja raha hai.",
+          );
+          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+          return res.type("text/xml").send(twiml.toString());
+        }
+
         ask(
           twiml,
           "Record nahi mila. Kripya chassis number ya registered mobile number dobara boliye.",
-          call
+          call,
         );
         break;
       }
 
       call.temp.customerId = customer._id;
+      call.temp.retries = 0;
       call.step = "ask_machine_location";
 
-      ask(twiml, `Aapka record mil gya aap ${customer.city} se ${customer.name} bol rahe hai.  Machine kis location par hai?`, call);
+      ask(
+        twiml,
+        `Aapka record mil gya aap ${customer.city} se ${customer.name} bol rahe hai.  Machine kis location par hai?`,
+        call,
+      );
       break;
     }
 
     /* ---------- LOCATION ---------- */
     case "ask_machine_location":
+      if (speech.length < 3) {
+    ask(twiml, "Kripya poora location batayein.", call);
+    break;
+  }
       call.temp.machineLocation = speech;
       call.step = "ask_contact_name";
       ask(twiml, "Contact person ka naam batayein.", call);
@@ -183,7 +283,7 @@ router.post("/process", async (req, res) => {
       });
 
       twiml.say(
-        "Dhanyavaad. Aapki complaint register ho gayi hai. Hamari team jald hi aapse sampark karegi."
+        "Dhanyavaad. Aapki complaint register ho gayi hai. Hamari team jald hi aapse sampark karegi.",
       );
       twiml.hangup();
       break;
@@ -195,6 +295,8 @@ router.post("/process", async (req, res) => {
 });
 
 export default router;
+
+
 
 
 
