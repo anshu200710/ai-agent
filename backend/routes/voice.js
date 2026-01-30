@@ -4,6 +4,7 @@ import twilio from "twilio";
 import CallSession from "../models/CallSession.js";
 import Customer from "../models/Customer.js";
 import Complaint from "../models/Complaint.js";
+import complaintMap from "../utils/complaintClassifier.js";
 
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -17,6 +18,14 @@ function cleanSpeech(text) {
     .replace(/[।.,!?]/g, "")
     .trim()
     .toLowerCase();
+}
+
+
+function normalizeText(text) {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /* =======================
@@ -63,6 +72,26 @@ function isConfusedSpeech(text) {
   ];
   return confusionWords.some((word) => text.includes(word));
 }
+
+/* =======================
+  Detact Complaint
+======================= */
+function detectComplaint(text) {
+  for (const [title, data] of Object.entries(complaintMap)) {
+    if (data.keywords.some(k => text.includes(k))) {
+      for (const [sub, subsKeywords] of Object.entries(data.subs)) {
+        if (subsKeywords.some(s => text.includes(s))) {
+          return { title, sub };
+        }
+      }
+      return { title, sub: "Other" };
+    }
+  }
+
+  return { title: "NA", sub: "Other" };
+}
+
+
 
 /* =======================
    ASK WITH GATHER
@@ -270,6 +299,11 @@ router.post("/process", async (req, res) => {
     case "ask_complaint": {
       const customer = await Customer.findById(call.temp.customerId);
 
+      const normalizedSpeech = normalizeText(speech);
+  
+      const { title, sub } = detectComplaint(speech);
+
+      
       await Complaint.create({
         customerId: customer._id,
         chassisNo: customer.chassisNo,
@@ -277,7 +311,9 @@ router.post("/process", async (req, res) => {
         customerName: customer.name,
         machineLocation: call.temp.machineLocation,
         contactPersonName: call.temp.contactName,
-        description: speech,
+        description_raw: speech,
+        complaintTitle: title,
+        complaintSubTitle: sub,
         callSid: CallSid,
         source: "IVR_VOICE_BOT",
       });

@@ -79,6 +79,18 @@ const ComplaintSchema = new mongoose.Schema(
       default: "Not provided by caller",
     },
 
+    /** AUTO CLASSIFIED */
+    complaintTitle: {
+      type: String,
+      default: "NA",
+      index: true,
+    },
+
+    complaintSubTitle: {
+      type: String,
+      default: "Other",
+    },
+
     callSid: {
       type: String,
       index: true,
