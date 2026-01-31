@@ -1,38 +1,3 @@
-// import mongoose from 'mongoose';
-
-// const CallSessionSchema = new mongoose.Schema({
-//   callSid: { type: String, required: true, index: true },
-//   from: String,
-
-//   step: {
-//     type: String,
-//     enum: [
-//       'ask_chassis',
-//       'repeat_chassis',
-//       "unregistered_options", 
-//       'ask_name',
-//       'ask_phone',
-//       'confirm_customer',
-//       'ask_city',
-//       'ask_complaint',
-//       'ask_issue_detail',
-//       'done'
-//     ],
-//     default: 'ask_chassis'
-//   },
-
-//   temp: {
-//     chassisNo: String,
-//     name: String,
-//     phone: String,
-//     city: String,
-//     complaintType: String,
-//     complaintDetail: String,
-//     customerId: mongoose.Schema.Types.ObjectId
-//   }
-// }, { timestamps: true });
-
-// export default mongoose.model('CallSession', CallSessionSchema);
 import mongoose from "mongoose";
 
 const CallSessionSchema = new mongoose.Schema(
@@ -53,6 +18,9 @@ const CallSessionSchema = new mongoose.Schema(
         "ask_machine_location",
         "ask_contact_name",
         "ask_complaint",
+        "confirm_complaint",       // ← was missing — caused the crash
+        "ask_sub_complaint",
+        "save_complaint",
         "done",
       ],
       default: "ivr_menu",
@@ -60,6 +28,10 @@ const CallSessionSchema = new mongoose.Schema(
 
     temp: {
       retries: {
+        type: Number,
+        default: 0,
+      },
+      subRetries: {
         type: Number,
         default: 0,
       },
@@ -74,6 +46,14 @@ const CallSessionSchema = new mongoose.Schema(
       identifierRaw: String,
       machineLocation: String,
       contactName: String,
+      rawComplaint: String,
+
+      // intent detection — stored as flat fields so Mongoose doesn't reject unknown nested keys
+      detectedIntentPrimary: String,
+      detectedIntentConfidence: Number,
+
+      complaintTitle: String,
+      complaintSubTitle: String,
     },
   },
   { timestamps: true }
