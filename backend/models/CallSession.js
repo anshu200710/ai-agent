@@ -5,6 +5,7 @@ const CallSessionSchema = new mongoose.Schema(
     callSid: {
       type: String,
       required: true,
+      unique: true,
       index: true,
     },
 
@@ -15,10 +16,13 @@ const CallSessionSchema = new mongoose.Schema(
       enum: [
         "ivr_menu",
         "ask_identifier",
-        "ask_machine_location",
-        "ask_contact_name",
+        "ask_complaint_given_by_name",
+        "ask_complaint_given_by_phone",
+        "ask_machine_type",
+        "ask_machine_status",
+        "ask_job_location",
         "ask_complaint",
-        "confirm_complaint",       // ← was missing — caused the crash
+        "confirm_complaint",
         "ask_sub_complaint",
         "save_complaint",
         "done",
@@ -31,6 +35,7 @@ const CallSessionSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+
       subRetries: {
         type: Number,
         default: 0,
@@ -38,20 +43,29 @@ const CallSessionSchema = new mongoose.Schema(
 
       lastQuestion: String,
 
+      // Customer identification
       customerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Customer",
       },
 
       identifierRaw: String,
+
+      // New required fields
+      complaintGivenByName: String,
+      complaintGivenByPhone: String,
+      machineType: String,
+      machineStatus: String,
+      jobLocation: String,
+
+      // Location & contact (legacy - keeping for compatibility)
       machineLocation: String,
       contactName: String,
-      rawComplaint: String,
 
-      // intent detection — stored as flat fields so Mongoose doesn't reject unknown nested keys
+      // Complaint details
+      rawComplaint: String,
       detectedIntentPrimary: String,
       detectedIntentConfidence: Number,
-
       complaintTitle: String,
       complaintSubTitle: String,
     },
