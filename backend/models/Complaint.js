@@ -34,24 +34,6 @@ const ComplaintSchema = new mongoose.Schema(
 
     machineModel: {
       type: String,
-      enum: [
-        "AGRIMAX",
-        "ENGINE",
-        "GENARATOR",
-        "GENERATOR",
-        "HL",
-        "HL/BHL",
-        "MH",
-        "R/B, BHL",
-        "R/B, HL",
-        "Recon",
-        "Robot",
-        "Scissor",
-        "Seccisor",
-        "TH",
-        "BHL",
-        "Unknown"
-      ],
       default: "Unknown",
     },
 
@@ -66,17 +48,6 @@ const ComplaintSchema = new mongoose.Schema(
 
     machineType: {
       type: String,
-      enum: [
-        "Warranty",
-        "2nd Year Warranty",
-        "JCB Care + 3rd Year",
-        "JCB Care+ Power Train",
-        "Engine Care",
-        "ASC",
-        "Beyond Warranty",
-        "Demo",
-        "NA"
-      ],
       default: "NA",
     },
 
@@ -111,32 +82,17 @@ const ComplaintSchema = new mongoose.Schema(
 
     complainBy: {
       type: String,
-      enum: [
-        "Customer",
-        "Coordinator",
-        "For Claim",
-        "Outlet",
-        "Service Engineer",
-        "Care Link",
-        "Live Link Alert"
-      ],
       default: "Customer",
     },
 
     // ========== MACHINE STATUS & LOCATION ==========
     machineStatus: {
       type: String,
-      enum: [
-        "Break Down",
-        "Running With Problem",
-        "Running OK"
-      ],
       required: true,
     },
 
     jobLocation: {
       type: String,
-      enum: ["Work Shop", "Onsite"],
       default: "Onsite",
     },
 
@@ -148,59 +104,12 @@ const ComplaintSchema = new mongoose.Schema(
     // ========== BRANCH & OUTLET ==========
     branch: {
       type: String,
-      enum: [
-        "AJMER",
-        "ALWAR",
-        "BHILWARA",
-        "JAIPUR",
-        "KOTA",
-        "SIKAR",
-        "UDAIPUR",
-        "NA"
-      ],
       required: true,
       index: true,
     },
 
     outlet: {
       type: String,
-      enum: [
-        // AJMER
-        "AJMER",
-        "KEKRI",
-        // ALWAR
-        "ALWAR",
-        "BHARATPUR",
-        "BHIWADI",
-        "DHOLPUR",
-        // BHILWARA
-        "BHILWARA",
-        "NIMBAHERA",
-        "PRATAPGARH",
-        // JAIPUR
-        "DAUSA",
-        "GONER ROAD",
-        "JAIPUR",
-        "KARAULI",
-        "KOTPUTLI",
-        "NEEM KA THANA",
-        "TONK",
-        "VKIA",
-        // KOTA
-        "JHALAWAR",
-        "KOTA",
-        "RAMGANJMANDI",
-        // SIKAR
-        "JHUNJHUNU",
-        "SIKAR",
-        "SUJANGARH",
-        // UDAIPUR
-        "BANSWARA",
-        "DUNGARPUR",
-        "RAJSAMAND",
-        "UDAIPUR",
-        "NA"
-      ],
       required: true,
     },
 
@@ -227,29 +136,6 @@ const ComplaintSchema = new mongoose.Schema(
 
     complaintTitle: {
       type: String,
-      enum: [
-        "Attachment",
-        "Body Work",
-        "Cabin",
-        "Electrical Complaint",
-        "Engine",
-        "Fabrication part",
-        "Transmission/Axle components",
-        "Hose",
-        "Hydraulic",
-        "Ram/Cylinder",
-        "Service",
-        "Tyre/Battery",
-        "Under Carriage",
-        "PDI",
-        "Installation",
-        "General Visit",
-        "Livelink",
-        "ECU problem",
-        "Campaign",
-        "NA",
-        "AC System"
-      ],
       default: "NA",
       index: true,
     },
@@ -273,7 +159,6 @@ const ComplaintSchema = new mongoose.Schema(
 
     source: {
       type: String,
-      enum: ["IVR_VOICE_BOT", "MANUAL", "WEB", "MOBILE_APP"],
       default: "IVR_VOICE_BOT",
     },
 
@@ -285,7 +170,6 @@ const ComplaintSchema = new mongoose.Schema(
     // ========== STATUS & ASSIGNMENT ==========
     status: {
       type: String,
-      enum: ["open", "assigned", "in_progress", "resolved", "closed"],
       default: "open",
       index: true,
     },
@@ -297,7 +181,6 @@ const ComplaintSchema = new mongoose.Schema(
 
     priority: {
       type: String,
-      enum: ["low", "medium", "high", "critical"],
       default: "medium",
     },
 
