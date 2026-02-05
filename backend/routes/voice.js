@@ -498,6 +498,7 @@ const followUpQuestions = {
       cooling: "AC not Cooling",
       thanda: "AC not Cooling",
       एक: "AC",
+      ए: "AC",
       "nahi kar rahi": "AC not Cooling",
       "कूलिंग नहीं": "AC not Cooling",
       "ठंडा नहीं": "AC not Cooling",
@@ -1180,7 +1181,7 @@ router.post("/process", async (req, res) => {
 
       ask(
         twiml,
-        `Aapka record mil gaya. ${externalData.name} ji, complaint kis ke naam se register karni hai?`,
+        `Aapka record mil gaya. ${externalData.name} ji, Kripya apna pura naam btaiye?`,
         call,
       );
       break;
@@ -1198,7 +1199,7 @@ router.post("/process", async (req, res) => {
           call.temp.complaintGivenByName = call.temp.customerData?.name || "Customer";
           call.temp.retries = 0;
           call.step = "ask_complaint_given_by_phone";
-          ask(twiml, "Complaint dene wale ka phone number boliye.", call);
+          ask(twiml, "apna 10 digit contact number batayein", call);
           break;
         }
         
@@ -1209,7 +1210,7 @@ router.post("/process", async (req, res) => {
       call.temp.complaintGivenByName = rawSpeech; // Store raw speech, will be cleaned later
       call.temp.retries = 0;
       call.step = "ask_complaint_given_by_phone";
-      ask(twiml, "Complaint dene wale ka phone number boliye.", call);
+      ask(twiml, "apna 10 digit contact number batayein.", call);
       break;
     }
 
