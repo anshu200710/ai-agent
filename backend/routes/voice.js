@@ -5,7 +5,6 @@ import axios from "axios";
 import CallSession from "../models/CallSession.js";
 import Customer from "../models/Customer.js";
 import Complaint from "../models/Complaint.js";
-import complaintMap from "../utils/complaintClassifier.js";
 
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -68,6 +67,526 @@ const cityToBranchMap = {
   udaipur: { branch: "UDAIPUR", outlet: "UDAIPUR", cityCode: "7" },
 };
 
+/* =======================
+   COMPLETE COMPLAINT MAPPING WITH SUB-TITLES
+======================= */
+const complaintMap = {
+  "Attachment": {
+    keywords: ["attachment", "bucket", "breaker", "rock breaker", "als", "livelink", "अटैचमेंट", "बकेट"],
+    subTitles: {
+      "ALS problem": ["als", "एएलएस"],
+      "Bucket Crack Issue": ["bucket crack", "bucket फटी", "bucket टूटी"],
+      "Live link problem": ["livelink", "live link", "लाइवलिंक"],
+      "Rock breaker problem": ["rock breaker", "breaker", "रॉक ब्रेकर", "ब्रेकर"]
+    }
+  },
+
+  "Body Work": {
+    keywords: ["body", "bushing", "drum", "noise", "vibration", "बॉडी", "ड्रम"],
+    subTitles: {
+      "Bushing Work": ["bushing", "बुशिंग"],
+      "Leakage from Drum": ["drum leak", "ड्रम लीक"],
+      "Noise from Drum": ["drum noise", "drum आवाज", "ड्रम शोर"],
+      "Vibration fault in Drum": ["vibration", "कंपन"],
+      "Water Sprinkle Pipe fault": ["water pipe", "sprinkle", "पानी पाइप"],
+      "color fad problem": ["color", "paint", "रंग"],
+      "Decal/Sticker Pesting": ["sticker", "decal", "स्टीकर"]
+    }
+  },
+
+  "Cabin": {
+    keywords: ["cabin", "cab", "door", "glass", "seat", "केबिन", "सीट", "दरवाजा"],
+    subTitles: {
+      "bonnet crack": ["bonnet crack", "bonnet फटी"],
+      "Cab Door Fault": ["door", "दरवाजा"],
+      "Cabin glass cracked": ["glass crack", "शीशा टूटा"],
+      "Cabin Glass removed": ["glass remove", "शीशा हटा"],
+      "Door/window lock inoperative": ["lock", "ताला"],
+      "Fan not working": ["fan", "पंखा"],
+      "mounting problem": ["mounting", "माउंटिंग"],
+      "Operator Seat problems": ["seat", "सीट"],
+      "Roof cracked": ["roof crack", "छत"]
+    }
+  },
+
+  "Electrical Complaint": {
+    keywords: ["electrical", "battery", "light", "wiring", "starter", "बिजली", "बैटरी", "लाइट", "वायरिंग"],
+    subTitles: {
+      "Alternator not Working": ["alternator", "अल्टरनेटर"],
+      "Error Code in Machine display": ["error code", "display error"],
+      "Fuel Gauge not show/in correct level show": ["fuel gauge", "फ्यूल गेज"],
+      "Fuel Motor not Working": ["fuel motor"],
+      "Hour meter not working": ["hour meter", "मीटर"],
+      "Light glowing problem": ["light glow", "लाइट जल रही"],
+      "Pump water motor": ["water pump motor"],
+      "Relay fault": ["relay", "रिले"],
+      "Reverse forward switch broken": ["reverse switch", "switch टूटा"],
+      "Self/Starter motor problem": ["starter", "self", "सेल्फ", "स्टार्टर"],
+      "speed/rpm meter not working": ["rpm", "speed meter", "आरपीएम"],
+      "Starting trouble": ["start problem", "start नहीं हो रही", "स्टार्ट दिक्कत", "स्टार्ट नहीं हो रही", "स्टार्ट ट्रबल", "स्टार्ट "],
+      "Switch Fault": ["switch", "स्विच"],
+      "Warnings/Alarm": ["warning", "alarm", "चेतावनी"],
+      "Wiper motor not working": ["wiper", "वाइपर"],
+      "Wiring problem": ["wiring", "wire", "वायरिंग", "तार"],
+      "Light not working": ["light", "लाइट"],
+      "Rope wire broken": ["rope wire", "तार टूटा"],
+      "Stop Cable fault": ["stop cable", "केबल"],
+      "AC Problem": ["ac", "एसी", "ऐसी", "एकसी", "cooling", "ठंडा", "कूलिंग", "एक", "सी", "ए", "सी", "ऐ", "कूलिंग", "ऐसी"],
+    }
+  },
+
+  "Engine": {
+    keywords: ["engine", "इंजन", "smoke", "overheat", "noise", "धुआ", "गरम"],
+    subTitles: {
+      "Abnormal Noise": ["noise", "sound", "आवाज", "शोर"],
+      "Air problem": ["air", "हवा"],
+      "coolant leak": ["coolant leak", "पानी लीक"],
+      "Engine accessories": ["accessories", "एक्सेसरीज"],
+      "Engine Lugg down": ["lugg down", "power kam"],
+      "Engine Over heating": ["overheat", "गरम", "heat", "गर्मी"],
+      "Engine seal leak": ["seal leak", "सील लीक"],
+      "Fan belt broken": ["fan belt", "belt", "बेल्ट"],
+      "FIP issue": ["fip", "एफआईपी"],
+      "Fuel consumption high": ["fuel ज्यादा", "diesel ज्यादा", "fuel consumption"],
+      "Leakages engine": ["engine leak", "इंजन लीक"],
+      "missing problem": ["missing", "मिसिंग"],
+      "Oil consumption high": ["oil ज्यादा", "oil consumption"],
+      "Radiator leak": ["radiator", "रेडिएटर"],
+      "Smoke problem": ["smoke", "धुआ", "धुंआ"],
+      "swing motor problem": ["swing motor", "स्विंग मोटर"],
+      "Engine mounting problem": ["mounting", "माउंटिंग"],
+      "Accelerator cable problem": ["accelerator", "cable", "केबल"]
+    }
+  },
+
+  "Fabrication part": {
+    keywords: ["fabrication", "crack", "boom", "bucket", "chassis", "फैब्रिकेशन", "क्रैक"],
+    subTitles: {
+      "Boom cracked": ["boom crack", "boom फटी"],
+      "Bucket cracked": ["bucket crack", "bucket फटी"],
+      "Bucket issue": ["bucket", "बकेट"],
+      "Chassis cracked": ["chassis crack", "chassis फटी"],
+      "Dipper cracked": ["dipper crack", "dipper फटी"],
+      "Fuel Tank Leakage": ["fuel tank leak", "टैंक लीक"],
+      "Hydraulic Tank leakage": ["hydraulic tank", "हाइड्रोलिक टैंक"],
+      "Inner leg Cracked/Bend": ["inner leg", "leg crack"],
+      "King post problem/cracked": ["king post", "पोस्ट"],
+      "Loader arm bend": ["loader arm bend", "arm मुड़ा"],
+      "Loader arm cracked": ["loader arm crack", "arm फटा"],
+      "Pin broken": ["pin broken", "पिन टूटा"],
+      "Teeth broken": ["teeth broken", "दांत टूटा"],
+      "Tipping lever cracked": ["tipping lever"],
+      "Tippnig link problem": ["tipping link"],
+      "Tank leak/crack": ["tank", "टैंक"],
+      "Stabilizer Pad problem": ["stabilizer", "स्टेबलाइजर"]
+    }
+  },
+
+  "Transmission/Axle components": {
+    keywords: ["transmission", "gear", "brake", "axle", "ट्रांसमिशन", "गियर", "ब्रेक"],
+    subTitles: {
+      "Abnormal sound Transmission/Axle": ["sound", "noise", "आवाज"],
+      "Barring problem": ["barring", "बैरिंग"],
+      "Brake problem": ["brake", "ब्रेक"],
+      "Gear box problem": ["gear box", "gearbox", "गियर बॉक्स"],
+      "Gear hard": ["gear hard", "gear sख्त"],
+      "Oil leak from transmission": ["oil leak", "तेल लीक"],
+      "Reverse forward issue": ["reverse", "forward", "रिवर्स"],
+      "Transmission overheat": ["transmission गरम", "overheat"]
+    }
+  },
+
+  "Hose": {
+    keywords: ["hose", "pipe", "होस", "पाइप"],
+    subTitles: {
+      "Hose O ring Cut": ["o ring", "oring", "ओ रिंग"],
+      "Hose cut": ["hose cut", "होस कटा"],
+      "Hose leakages": ["hose leak", "होस लीक"]
+    }
+  },
+
+  "Hydraulic": {
+    keywords: ["hydraulic", "हाइड्रोलिक", "pressure", "pump", "प्रेशर", "पंप"],
+    subTitles: {
+      "Abnormal sound": ["sound", "noise", "आवाज"],
+      "Control Valve leakage": ["control valve", "valve leak"],
+      "EVB seal leak": ["evb", "ईवीबी"],
+      "Hydra clamp issue": ["hydra clamp"],
+      "Hydraulic gauge leakage": ["gauge leak"],
+      "Hydraulic pump broken": ["pump broken", "pump टूटा"],
+      "Hydraulic pump leak": ["pump leak", "पंप लीक"],
+      "Hydraulic pump Noise": ["pump noise", "pump आवाज"],
+      "Joy Stick Leakage": ["joystick", "joy stick"],
+      "LVB seal leak": ["lvb"],
+      "Machine performance low/Slow working": ["slow", "धीरे", "कम speed", "power kam"],
+      "Oil cooler leak": ["oil cooler"],
+      "Pressure down": ["pressure", "प्रेशर", "कम"],
+      "Rotary Coupling leakage": ["rotary coupling"],
+      "spool seal leak": ["spool"],
+      "Swing Motor leakage": ["swing motor leak"],
+      "Swing Motor not braking": ["swing motor brake"],
+      "Travel Pedal leakage": ["travel pedal"]
+    }
+  },
+
+  "Ram/Cylinder": {
+    keywords: ["ram", "cylinder", "rod", "सिलेंडर", "रॉड"],
+    subTitles: {
+      "Boom ram seal leak": ["boom ram", "boom सील"],
+      "bucket ram seal leak": ["bucket ram", "bucket सील"],
+      "Cylinder welding leak": ["cylinder weld", "welding"],
+      "Dipper ram seal leak": ["dipper ram", "dipper सील"],
+      "Dozer Cylinder leak": ["dozer cylinder"],
+      "Dozer ram seal leak": ["dozer ram"],
+      "kpc/selw cylinder seal leak": ["kpc", "selw"],
+      "Lift ram seal leak": ["lift ram"],
+      "Ram leak": ["ram leak", "राम लीक"],
+      "Rod bend": ["rod bend", "rod मुड़ा", "रॉड मुड़ा"],
+      "Rod broken": ["rod broken", "rod टूटा", "रॉड टूटा"],
+      "Rod scratch": ["rod scratch", "rod खरोंच"],
+      "Slew ram seal leak": ["slew ram"],
+      "Stabilizer ram seal leak": ["stabilizer ram"],
+      "Steering ram seal leak": ["steering ram"]
+    }
+  },
+
+  "Service": {
+    keywords: ["service", "सर्विस", "servicing"],
+    subTitles: {
+      "Actual Service": ["actual service", "regular service"],
+      "Service Visit": ["service visit", "visit"]
+    }
+  },
+
+  "Tyre/Battery": {
+    keywords: ["tyre", "tire", "battery", "puncture", "टायर", "बैटरी", "पंक्चर"],
+    subTitles: {
+      "Battery problem": ["battery", "बैटरी", "dead"],
+      "Tube joint opened": ["tube joint", "tube खुला"],
+      "Tube puncture": ["tube puncture", "ट्यूब पंक्चर"],
+      "Tyre burst": ["burst", "फटा", "फूटा"],
+      "Tyre cut": ["tyre cut", "tire cut", "टायर कटा"],
+      "Tyre rubber breaking": ["rubber break", "rubber टूट रहा"]
+    }
+  },
+
+  "Under Carriage": {
+    keywords: ["under carriage", "track", "roller", "idler", "sprocket", "ट्रैक", "रोलर"],
+    subTitles: {
+      "Idler wheel leakage": ["idler leak", "आइडलर लीक"],
+      "Idler wheel noise": ["idler noise", "idler आवाज"],
+      "Ring gear Crack": ["ring gear", "गियर क्रैक"],
+      "Roller Bent": ["roller bend", "रोलर मुड़ा"],
+      "Roller leakage": ["roller leak", "रोलर लीक"],
+      "Sprocket Wear": ["sprocket", "स्प्रॉकेट"],
+      "Track gear Box noise": ["track gear noise"],
+      "Track Motor leak": ["track motor", "ट्रैक मोटर"],
+      "Track Shoe bend/Broken": ["track shoe", "shoe टूटा"],
+      "Track tension yoke,spring broken": ["tension", "spring", "yoke"]
+    }
+  },
+
+  "PDI": {
+    keywords: ["pdi", "पीडीआई"],
+    subTitles: {
+      "PDI": ["pdi"]
+    }
+  },
+
+  "Installation": {
+    keywords: ["installation", "install", "इंस्टालेशन"],
+    subTitles: {
+      "Installation visit": ["installation", "install"]
+    }
+  },
+
+  "General Visit": {
+    keywords: ["visit", "general", "monthly", "विजिट"],
+    subTitles: {
+      "ASC Visit": ["asc"],
+      "BW Visit": ["bw"],
+      "General Visit": ["general visit", "visit"],
+      "Monthly Visit": ["monthly", "महीने"],
+      "Number plate fitment": ["number plate", "plate"],
+      "Accidental": ["accident", "एक्सीडेंट"]
+    }
+  },
+
+  "Livelink": {
+    keywords: ["livelink", "live link", "लाइवलिंक"],
+    subTitles: {
+      "Livelink not working": ["livelink", "live link"],
+      "Alert": ["alert", "अलर्ट"]
+    }
+  },
+
+  "ECU problem": {
+    keywords: ["ecu", "ईसीयू"],
+    subTitles: {}
+  },
+
+  "Campaign": {
+    keywords: ["campaign", "fsi", "कैम्पेन"],
+    subTitles: {
+      "Campaign Visit": ["campaign"],
+      "FSI": ["fsi", "एफएसआई"]
+    }
+  },
+
+  "AC System": {
+    keywords: ["ac", "एसी", "ऐसी", "cooling", "ठंडा", "कूलिंग"],
+    subTitles: {
+      "AC not Working": ["ac नहीं चल रही", "ac band", "ac not working", "काम नहीं कर रही"],
+      "AC not Cooling": ["cooling", "ठंडा नहीं", "ठंडी नहीं", "कूलिंग नहीं"]
+    }
+  }
+};
+
+/* =======================
+   SMART FOLLOW-UP QUESTIONS (Enhanced)
+======================= */
+const smartFollowUpQuestions = {
+  // When chassis number not known
+  "chassis_unknown": [
+    "Koi baat nahi. Aap machine kab se use kar rahe hain?",
+    "Machine ka model batayein? JCB 3DX hai ya koi aur?",
+    "Machine ki koi aur pehchan batayein jaise registration number?"
+  ],
+  
+  // When problem not clear
+  "problem_unclear": [
+    "Machine kab se band hai?",
+    "Kya machine bilkul band hai ya thodi bahut chal rahi hai?",
+    "Pichli baar machine kab theek thi?",
+    "Machine mein koi aawaz aa rahi hai?",
+    "Kya koi smoke ya dhuan aa raha hai?",
+    "Kya machine start ho rahi hai?"
+  ],
+
+  // Time-based questions
+  "timeline": [
+    "Yeh problem kab se hai?",
+    "Kya yeh achanak hua ya dheere dheere?",
+    "Pichli servicing kab hui thi?"
+  ],
+
+  // Severity questions
+  "severity": [
+    "Kya machine bilkul band hai ya kuch kaam kar rahi hai?",
+    "Kya machine chalane mein khatraa hai?",
+    "Kya machine se koi leak ho raha hai?"
+  ]
+};
+
+/* =======================
+   CONFUSION DETECTION & HANDLING
+======================= */
+function detectConfusion(text, context = {}) {
+  if (!text) return { isConfused: true, reason: "empty_response" };
+
+  const confusionPatterns = {
+    repetition: /\b(\w+)\s+\1\b/gi,
+    questioning: /(kya|kaun|kahan|kaise|kab|kyun)\s+(kya|kaun|kahan|kaise|kab|kyun)/gi,
+    uncertainty: /(pata nahi|yaad nahi|maloom nahi|samajh nahi|nahi pata)/gi,
+    filler: /^(haan|nahi|ji|hmm|uh|um|aa)\s*$/gi,
+    repeat_request: /(dobara|fir se|repeat|phir|ek baar aur)/gi
+  };
+
+  const confusionIndicators = {
+    isConfused: false,
+    reason: null,
+    confidence: 0
+  };
+
+  // Check each pattern
+  for (const [key, pattern] of Object.entries(confusionPatterns)) {
+    if (pattern.test(text)) {
+      confusionIndicators.isConfused = true;
+      confusionIndicators.reason = key;
+      confusionIndicators.confidence = 0.8;
+      break;
+    }
+  }
+
+  // Check if response is too short and not a valid answer
+  if (text.length < 3 && !['haan', 'nahi', 'ji', 'yes', 'no', 'हां', 'नहीं'].includes(text.toLowerCase())) {
+    confusionIndicators.isConfused = true;
+    confusionIndicators.reason = "too_short";
+    confusionIndicators.confidence = 0.9;
+  }
+
+  return confusionIndicators;
+}
+
+function handleConfusion(confusionType, lastQuestion, call) {
+  const clarifications = {
+    repetition: "Main samajh nahi paaya. Kripya clearly bolein.",
+    questioning: lastQuestion ? `${lastQuestion} - Sirf apna jawab bolein.` : "Kripya simple shabd mein jawab dein.",
+    uncertainty: "Koi dikkat nahi. Jo bhi aapko yaad hai woh batayein.",
+    filler: lastQuestion || "Kripya apna jawab bolein.",
+    repeat_request: lastQuestion || "Main fir se pooch raha hoon:",
+    too_short: "Thoda detail mein batayein.",
+    empty_response: "Kripya apna jawab bolein."
+  };
+
+  return clarifications[confusionType] || lastQuestion || "Kripya dobara bolein.";
+}
+
+/* =======================
+   ENHANCED COMPLAINT DETECTION
+======================= */
+function detectComplaintIntent(text, previousContext = {}) {
+  if (!text) return null;
+
+  const matches = [];
+  const confidenceScores = {};
+
+  // Check against all complaint categories
+  for (const [title, data] of Object.entries(complaintMap)) {
+    let matchScore = 0;
+    let matchedKeywords = [];
+
+    // Check main keywords
+    for (const keyword of data.keywords) {
+      if (text.includes(keyword)) {
+        matchScore += 2;
+        matchedKeywords.push(keyword);
+      }
+    }
+
+    // Check sub-title keywords for better accuracy
+    if (data.subTitles) {
+      for (const [subTitle, subKeywords] of Object.entries(data.subTitles)) {
+        for (const subKeyword of subKeywords) {
+          if (text.includes(subKeyword)) {
+            matchScore += 3; // Higher score for specific sub-keywords
+            matchedKeywords.push(subKeyword);
+          }
+        }
+      }
+    }
+
+    if (matchScore > 0) {
+      matches.push(title);
+      confidenceScores[title] = matchScore;
+    }
+  }
+
+  if (matches.length === 0) return null;
+
+  // Sort by confidence score
+  matches.sort((a, b) => confidenceScores[b] - confidenceScores[a]);
+
+  const topScore = confidenceScores[matches[0]];
+  const confidence = topScore >= 5 ? 0.95 : topScore >= 3 ? 0.75 : 0.5;
+
+  return {
+    primary: matches[0],
+    secondary: matches.slice(1, 3),
+    confidence: confidence,
+    matchedKeywords: matches.map(m => ({
+      title: m,
+      score: confidenceScores[m]
+    }))
+  };
+}
+
+function detectSubComplaint(mainComplaint, text) {
+  if (!mainComplaint || !complaintMap[mainComplaint]) return null;
+
+  const subTitles = complaintMap[mainComplaint].subTitles;
+  if (!subTitles || Object.keys(subTitles).length === 0) {
+    return { subTitle: "Other", confidence: 1.0 };
+  }
+
+  let bestMatch = null;
+  let highestScore = 0;
+
+  for (const [subTitle, keywords] of Object.entries(subTitles)) {
+    let score = 0;
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        score += keyword.length; // Longer keywords = more specific = higher score
+      }
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = subTitle;
+    }
+  }
+
+  if (bestMatch) {
+    return {
+      subTitle: bestMatch,
+      confidence: highestScore >= 5 ? 0.9 : 0.7
+    };
+  }
+
+  return { subTitle: "Other", confidence: 0.5 };
+}
+
+/* =======================
+   SMART QUESTION SELECTOR
+======================= */
+function getSmartFollowUp(context) {
+  const { step, attemptCount, lastIntent, customerData } = context;
+
+  // If chassis number unknown
+  if (step === 'ask_identifier' && attemptCount >= 2) {
+    return smartFollowUpQuestions.chassis_unknown[attemptCount % smartFollowUpQuestions.chassis_unknown.length];
+  }
+
+  // If problem unclear
+  if (step === 'ask_complaint' && attemptCount >= 1) {
+    return smartFollowUpQuestions.problem_unclear[attemptCount % smartFollowUpQuestions.problem_unclear.length];
+  }
+
+  // Timeline questions for severity assessment
+  if (lastIntent && attemptCount === 0) {
+    return smartFollowUpQuestions.timeline[0];
+  }
+
+  return null;
+}
+
+/* =======================
+   GENERATE SUBCOMPLAINT QUESTION
+======================= */
+function generateSubComplaintQuestion(mainComplaint) {
+  const data = complaintMap[mainComplaint];
+  if (!data || !data.subTitles || Object.keys(data.subTitles).length === 0) {
+    return null;
+  }
+
+  const questions = {
+    "AC System": "AC bilkul band hai ya sirf thanda nahi kar rahi?",
+    "Engine": "Engine mein exactly kya problem hai? Overheating, smoke, noise ya start mein dikkat?",
+    "Hydraulic": "Hydraulic mein kya issue hai? Pressure kam hai, leak hai ya machine slow chal rahi hai?",
+    "Electrical Complaint": "Electrical mein kya problem hai? Battery, starter, light ya wiring?",
+    "Tyre/Battery": "Tyre puncture hai, phatta hai ya battery ki problem hai?",
+    "Transmission/Axle components": "Gear mein problem hai, brake mein ya reverse forward mein?",
+    "Ram/Cylinder": "Ram ya cylinder mein leak hai, rod bend hai ya kuch aur?",
+    "Hose": "Hose cut hai ya leak hai?",
+    "Under Carriage": "Track, roller ya idler mein problem hai?",
+    "Body Work": "Body mein kya problem hai? Crack, leak ya noise?",
+    "Cabin": "Cabin mein door, glass, seat ya aur kuch?",
+    "Fabrication part": "Kaunsa part crack hua hai? Boom, bucket, chassis ya aur kuch?",
+    "Attachment": "Attachment mein kya problem hai?"
+  };
+
+  return questions[mainComplaint] || `${mainComplaint} mein exactly kya problem hai? Thoda detail mein batayein.`;
+}
+
+/* =======================
+   [REST OF THE UTILITY FUNCTIONS FROM ORIGINAL CODE]
+   Including: detectBranchAndOutlet, fetchCustomerFromExternal, 
+   submitComplaintToExternal, translateComplaintToEnglish,
+   cleanSpeech, normalizeText, safeAscii, getCallerName,
+   formatDateForExternal, normalizePersonName, hindiToEnglishMap,
+   normalizeHindiIntent, hindiNumberMap, wordsToDigits, etc.
+======================= */
+
 function detectBranchAndOutlet(city) {
   if (!city) return { branch: "NA", outlet: "NA", cityCode: "NA" };
   const normalized = city.toLowerCase().trim();
@@ -75,9 +594,6 @@ function detectBranchAndOutlet(city) {
   return result || { branch: "NA", outlet: "NA", cityCode: "NA" };
 }
 
-/* =======================
-   EXTERNAL API - FETCH CUSTOMER
-======================= */
 async function fetchCustomerFromExternal({ phone, chassisNo }) {
   try {
     let apiUrl = null;
@@ -149,9 +665,6 @@ async function fetchCustomerFromExternal({ phone, chassisNo }) {
   }
 }
 
-/* =======================
-   EXTERNAL API - SUBMIT COMPLAINT
-======================= */
 async function submitComplaintToExternal(complaintData) {
   try {
     console.log(
@@ -253,32 +766,47 @@ async function submitComplaintToExternal(complaintData) {
   }
 }
 
-/* =======================
-   Complaint convert to English
-======================= */
 function translateComplaintToEnglish(rawText) {
   if (!rawText) return "Not provided by caller";
 
   let text = rawText.toLowerCase();
 
-  // Replace Hindi keywords with English
+  const hindiToEnglishMap = {
+    "टायर नहीं": "tyre",
+    टायर: "tyre",
+    एसी: "ac",
+    ऐसी: "ac",
+    "ए.सी": "ac",
+    "ए सी": "ac",
+    इंजन: "engine",
+    हाइड्रोलिक: "hydraulic",
+    बिजली: "electrical",
+    इलेक्ट्रिकल: "electrical",
+    इंडियन: "engine",
+    बैटरी: "battery",
+    "काम नहीं": "not working",
+    "कूलिंग नहीं": "cooling not working",
+    ठंडा: "cooling",
+    कूलिंग: "cooling",
+    खराब: "breakdown",
+    बंद: "breakdown",
+    प्रॉब्लम: "problem",
+    समस्या: "problem",
+  };
+
   for (const [hindi, english] of Object.entries(hindiToEnglishMap)) {
     const regex = new RegExp(hindi, "gi");
     text = text.replace(regex, english);
   }
 
-  // Cleanup - remove Hindi characters completely
   text = text
     .replace(/\s+/g, " ")
-    .replace(/[^\x00-\x7F]/g, "") // Remove non-ASCII characters
+    .replace(/[^\x00-\x7F]/g, "")
     .trim();
 
   return text || "Not provided by caller";
 }
 
-/* =======================
-   TEXT PROCESSING UTILITIES
-======================= */
 function cleanSpeech(text) {
   if (!text) return "";
   return text
@@ -296,14 +824,7 @@ function normalizeText(text) {
 function safeAscii(text) {
   if (!text) return "Unknown";
   
-  // First try to transliterate common Hindi names to English
-  let transliterated = text;
-  
-  // Common Hindi to English transliterations
   const transliterationMap = {
-    'आज': 'Aaj',
-    'कल': 'Kal',
-    'बजे': 'Baje',
     'राम': 'Ram',
     'श्याम': 'Shyam',
     'मोहन': 'Mohan',
@@ -318,12 +839,11 @@ function safeAscii(text) {
     'गुप्ता': 'Gupta'
   };
   
-  // Apply transliteration
+  let transliterated = text;
   for (const [hindi, english] of Object.entries(transliterationMap)) {
     transliterated = transliterated.replace(new RegExp(hindi, 'g'), english);
   }
   
-  // Remove remaining non-ASCII characters
   const cleaned = transliterated
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -334,7 +854,6 @@ function safeAscii(text) {
 }
 
 function getCallerName(call, customerData) {
-  // 1️⃣ Prefer what caller actually said (cleaned to ASCII)
   const spokenName = normalizePersonName(call.temp.complaintGivenByName);
   if (spokenName) {
     const asciiName = safeAscii(spokenName);
@@ -343,12 +862,10 @@ function getCallerName(call, customerData) {
     }
   }
 
-  // 2️⃣ Fallback to registered customer name (already ASCII clean from API)
   if (customerData?.name && customerData.name !== "Unknown") {
     return safeAscii(customerData.name);
   }
 
-  // 3️⃣ Absolute fallback
   return "Not Provided";
 }
 
@@ -368,20 +885,15 @@ function formatDateForExternal(date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/* =======================
-   HINDI → English Caller Names
-======================= */
 function normalizePersonName(text) {
   if (!text) return null;
 
-  // Remove common time-related words and numbers
   const cleaned = text
     .replace(/[0-9]/g, "")
     .replace(/(kya|kaun|hai|bolo|repeat|dobara|aaj|kal|baje|subah|sham|din|raat|ghante|minute)/gi, "")
-    .replace(/[:]/g, "") // Remove colons
+    .replace(/[:]/g, "")
     .trim();
 
-  // Check if result is meaningful (at least 2 chars and not just punctuation)
   if (cleaned.length >= 2 && /[a-zA-Z\u0900-\u097F]/.test(cleaned)) {
     return cleaned;
   }
@@ -389,258 +901,26 @@ function normalizePersonName(text) {
   return null;
 }
 
-/* =======================
-   HINDI → ENGLISH NORMALIZER
-======================= */
-const hindiToEnglishMap = {
-  "टायर नहीं": "tyre",
-  टायर: "tyre",
-  एसी: "ac",
-  ऐसी: "ac",
-  "ए.सी": "ac",
-  "ए सी": "ac",
-  इंजन: "engine",
-  इंडियन: "engine",
-  हाइड्रोलिक: "hydraulic",
-  हाइड्रॉलिक: "hydraulic",
-  बिजली: "electrical",
-  इलेक्ट्रिकल: "electrical",
-  बैटरी: "battery",
-  "नॉट वर्किंग": "not working",
-  "वर्क नहीं": "not working",
-  "काम नहीं कर रहा है": "not working",
-  "काम नहीं कर रही है": "not working",
-  "काम नहीं कर रहा": "not working",
-  "काम नहीं कर रही": "not working",
-  "काम नहीं": "not working",
-  "कॉलिंग नहीं": "cooling not working",
-  "कूलिंग नहीं": "cooling not working",
-  "ठंडा नहीं": "cooling",
-  "ठंडी नहीं": "cooling",
-  ठंडा: "cooling",
-  ठंडी: "cooling",
-  कूलिंग: "cooling",
-  खराब: "breakdown",
-  बंद: "breakdown",
-  ब्रेकडाउन: "breakdown",
-  "ब्रेक डाउन": "breakdown",
-  "चल रहा": "running",
-  चालू: "running",
-  प्रॉब्लम: "problem",
-  दिक्कत: "problem",
-  समस्या: "problem",
-  वारंटी: "warranty",
-  केयर: "care",
-  डेमो: "demo",
-  स्मोक: "smoke",
-  धुआ: "smoke",
-  नॉइज: "noise",
-  आवाज: "noise",
-  गरम: "overheat",
-  ओवरहीट: "overheat",
-  स्टार्ट: "start",
-  मिसिंग: "missing",
-  हीट: "heat",
-  प्रेशर: "pressure",
-  लीक: "leak",
-  स्लो: "slow",
-  धीरे: "slow",
-  कम: "low",
-  स्टार्टर: "starter",
-  सेल्फ: "self",
-  वायरिंग: "wiring",
-  लाइट: "light",
-  आरपीएम: "rpm",
-  मीटर: "meter",
-  पंक्चर: "puncture",
-  फटा: "burst",
-  कट: "cut",
-  डेड: "dead",
-  गियर: "gear",
-  ब्रेक: "brake",
-  रिवर्स: "reverse",
-  रॉड: "rod",
-  रैम: "ram",
-  सील: "seal",
-  बेंड: "bend",
-  टूटा: "broken",
-  होस: "hose",
-  पाइप: "pipe",
-  ट्रैक: "track",
-  रोलर: "roller",
-  आइडलर: "idler",
-  स्प्रॉकेट: "sprocket",
-};
-
-const sortedHindiKeys = Object.keys(hindiToEnglishMap).sort(
-  (a, b) => b.length - a.length,
-);
-
 function normalizeHindiIntent(text) {
   if (!text) return "";
+  const hindiMap = {
+    "एसी": "ac",
+    "इंजन": "engine",
+    "हाइड्रोलिक": "hydraulic",
+    "बिजली": "electrical",
+    "टायर": "tyre",
+    "बैटरी": "battery"
+  };
+  
   let normalized = text;
-  for (const hindi of sortedHindiKeys) {
+  for (const [hindi, english] of Object.entries(hindiMap)) {
     if (normalized.includes(hindi)) {
-      normalized += " " + hindiToEnglishMap[hindi];
+      normalized += " " + english;
     }
   }
   return normalized;
 }
 
-/* =======================
-   FOLLOW UP QUESTIONS
-======================= */
-const followUpQuestions = {
-  "AC System": {
-    question:
-      "AC cooling nahi kar rahi hai ya bilkul kaam nahi kar rahi hai? Cooling hai ya band hai?",
-    options: {
-      cooling: "AC not Cooling",
-      thanda: "AC not Cooling",
-      एक: "AC",
-      ए: "AC",
-      "nahi kar rahi": "AC not Cooling",
-      "कूलिंग नहीं": "AC not Cooling",
-      "ठंडा नहीं": "AC not Cooling",
-      "ठंडी नहीं": "AC not Cooling",
-      band: "AC not Working",
-      "not working": "AC not Working",
-      kaam: "AC not Working",
-      "काम नहीं": "AC not Working",
-      बंद: "AC not Working",
-    },
-  },
-
-  Engine: {
-    question:
-      "Engine mein kya dikkat hai? Overheating hai, smoke aa raha hai, noise hai ya start mein problem hai?",
-    options: {
-      overheat: "Engine Over heating",
-      garam: "Engine Over heating",
-      heat: "Engine Over heating",
-      गरम: "Engine Over heating",
-      smoke: "Smoke problem",
-      dhua: "Smoke problem",
-      धुआ: "Smoke problem",
-      noise: "Abnormal Noise",
-      awaz: "Abnormal Noise",
-      आवाज: "Abnormal Noise",
-      start: "Not Starting/Starting problem",
-      missing: "Missing problem",
-      मिसिंग: "Missing problem",
-    },
-  },
-
-  Hydraulic: {
-    question:
-      "Hydraulic mein kya problem hai? Pressure kam hai, leak hai ya machine slow chal rahi hai?",
-    options: {
-      pressure: "Pressure down",
-      kam: "Pressure down",
-      कम: "Pressure down",
-      leak: "Hydraulic pump leak",
-      लीक: "Hydraulic pump leak",
-      slow: "Machine performance low/Slow working",
-      dheere: "Machine performance low/Slow working",
-      धीरे: "Machine performance low/Slow working",
-    },
-  },
-
-  "Electrical Complaint": {
-    question:
-      "Electrical mein kya dikkat hai? Battery hai, self starter hai, wiring hai ya light mein problem hai?",
-    options: {
-      battery: "Battery problem",
-      बैटरी: "Battery problem",
-      starter: "Self/Starter motor problem",
-      self: "Self/Starter motor problem",
-      सेल्फ: "Self/Starter motor problem",
-      wiring: "Wiring problem",
-      वायरिंग: "Wiring problem",
-      light: "Light not working",
-      लाइट: "Light not working",
-      rpm: "speed/rpm meter not working",
-      meter: "speed/rpm meter not working",
-      मीटर: "speed/rpm meter not working",
-    },
-  },
-
-  "Tyre/Battery": {
-    question:
-      "Tyre mein kya problem hai? Phatta gaya hai, puncture hai ya cut hai?",
-    options: {
-      puncture: "Tyre puncture",
-      phatta: "Tyre puncture",
-      burst: "Tyre puncture",
-      फटा: "Tyre puncture",
-      cut: "Tyre cut",
-      कट: "Tyre cut",
-      battery: "Battery problem",
-      dead: "Battery problem",
-      बैटरी: "Battery problem",
-    },
-  },
-
-  "Transmission/Axle components": {
-    question:
-      "Transmission mein kya problem hai? Gear hai, brake hai ya reverse mein dikkat hai?",
-    options: {
-      gear: "Gear box problem",
-      gearbox: "Gear box problem",
-      गियर: "Gear box problem",
-      brake: "Brake problem",
-      ब्रेक: "Brake problem",
-      reverse: "Reverse forward issue",
-      रिवर्स: "Reverse forward issue",
-    },
-  },
-
-  "Ram/Cylinder": {
-    question:
-      "Ram ya cylinder mein kya problem hai? Leak hai, rod bend hai ya rod toot gaya hai?",
-    options: {
-      leak: "Ram leak",
-      लीक: "Ram leak",
-      bend: "Rod bend",
-      बेंड: "Rod bend",
-      toot: "Rod broken",
-      broken: "Rod broken",
-      टूटा: "Rod broken",
-      seal: "Seal leak",
-      सील: "Seal leak",
-    },
-  },
-
-  Hose: {
-    question:
-      "Hose mein kya problem hai? Cut hai, leak hai ya O-ring mein dikkat hai?",
-    options: {
-      cut: "Hose cut",
-      कट: "Hose cut",
-      leak: "Hose leakages",
-      लीक: "Hose leakages",
-      "o ring": "Hose O ring Cut",
-      oring: "Hose O ring Cut",
-    },
-  },
-
-  "Under Carriage": {
-    question:
-      "Under carriage mein kya problem hai? Track hai, roller hai ya idler mein dikkat hai?",
-    options: {
-      track: "Track Motor leak",
-      ट्रैक: "Track Motor leak",
-      roller: "Roller leakage",
-      रोलर: "Roller leakage",
-      idler: "Idler wheel noise",
-      आइडलर: "Idler wheel noise",
-    },
-  },
-};
-
-/* =======================
-   HINDI NUMBER MAP
-======================= */
 const hindiNumberMap = {
   shunya: "0",
   zero: "0",
@@ -669,54 +949,6 @@ function wordsToDigits(text) {
   return result;
 }
 
-/* =======================
-   DETECTION FUNCTIONS
-======================= */
-function isConfusedSpeech(text) {
-  if (!text) return false;
-  const confusionWords = [
-    "kya",
-    "repeat",
-    "dobara",
-    "samajh nahi aaya",
-    "samajh nahi",
-    "fir se",
-  ];
-  return confusionWords.some((word) => text.includes(word));
-}
-
-function detectComplaintIntent(text) {
-  if (!text) return null;
-
-  const matches = [];
-  const words = text.split(" ");
-  const SKIP_KEYWORDS = ["ek", "not working", "band"];
-
-  for (const [title, data] of Object.entries(complaintMap)) {
-    for (const keyword of data.keywords) {
-      if (SKIP_KEYWORDS.includes(keyword)) continue;
-
-      if (
-        text.includes(keyword) ||
-        words.some(
-          (w) => w.length > 2 && (keyword.includes(w) || w.includes(keyword)),
-        )
-      ) {
-        matches.push(title);
-        break;
-      }
-    }
-  }
-
-  if (matches.length === 0) return null;
-
-  return {
-    primary: matches[0],
-    secondary: matches.slice(1),
-    confidence: matches.length === 1 ? 0.95 : 0.6,
-  };
-}
-
 function detectMachineType(text) {
   if (!text) return null;
 
@@ -742,8 +974,7 @@ function detectMachineStatus(text) {
     text.includes("break down") ||
     text.includes("खराब") ||
     text.includes("बंद") ||
-    text.includes("ब्रेकडाउन") ||
-    text.includes("ब्रेक डाउन")
+    text.includes("ब्रेकडाउन")
   ) {
     return "Break Down";
   }
@@ -836,22 +1067,18 @@ async function saveComplaint(twiml, call, CallSid) {
     formatDateForExternal(customerData.purchaseDate) ||
     "";
   
-  // Get caller name and ensure it's ASCII-safe
   const callerNameFinal = getCallerName(call, customerData);
 
-  // Get caller phone - use what they said or fallback to registered phone
   const callerPhoneFinal =
     call.temp.complaintGivenByPhone &&
     /^\d{10}$/.test(call.temp.complaintGivenByPhone)
       ? call.temp.complaintGivenByPhone
       : customerData.phone;
 
-  // Translate complaint details to English (removing all Hindi characters)
   const complaintDetailsEnglish = translateComplaintToEnglish(
     call.temp.rawComplaint || ""
   );
 
-  // Ensure subtitle is not "Other" if we have a valid one
   const finalSubTitle = call.temp.complaintSubTitle && 
                         call.temp.complaintSubTitle !== "Other" 
                         ? call.temp.complaintSubTitle 
@@ -860,12 +1087,10 @@ async function saveComplaint(twiml, call, CallSid) {
   console.log("🔍 Final processed data:");
   console.log("   Caller Name:", callerNameFinal);
   console.log("   Caller Phone:", callerPhoneFinal);
-  console.log("   Complaint Details:", complaintDetailsEnglish);
+  console.log("   Complaint Title:", call.temp.complaintTitle);
   console.log("   Subtitle:", finalSubTitle);
+  console.log("   Details:", complaintDetailsEnglish);
 
-  /* ════════════════════════════════════════════════════════════════
-     PREPARE EXTERNAL API PAYLOAD - ALL FIELDS IN ENGLISH
-  ════════════════════════════════════════════════════════════════ */
   const complaintApiData = {
     machine_no: customerData.chassisNo || "Unknown",
     customer_name: safeAscii(customerData.name),
@@ -882,7 +1107,7 @@ async function saveComplaint(twiml, call, CallSid) {
     branch: branchOutlet.branch,
     outlet: branchOutlet.outlet,
     city_id: branchOutlet.cityCode,
-    complaint_details: complaintDetailsEnglish,
+    complaint_details: call.temp.rawComplaint || "Not provided by caller",
     complaint_title: call.temp.complaintTitle || "NA",
     sub_title: finalSubTitle,
     business_partner_code: customerData.businessPartnerCode || "NA",
@@ -943,12 +1168,6 @@ async function saveComplaint(twiml, call, CallSid) {
     console.log(
       `✅ Complaint saved to database with ID: ${savedComplaint._id}`,
     );
-    console.log(
-      "✅ Complaint details:",
-      call.temp.complaintTitle,
-      "/",
-      finalSubTitle,
-    );
   } catch (dbError) {
     console.error("❌ Failed to save complaint to database:", dbError.message);
   }
@@ -974,7 +1193,7 @@ router.post("/", async (req, res) => {
       callSid: CallSid,
       from: From,
       step: "ivr_menu",
-      temp: { retries: 0 },
+      temp: { retries: 0, attemptCount: 0 },
     },
     { upsert: true, new: true },
   );
@@ -996,7 +1215,7 @@ router.post("/", async (req, res) => {
 });
 
 /* =======================
-   CALL PROCESSING HANDLER
+   CALL PROCESSING HANDLER (ENHANCED)
 ======================= */
 router.post("/process", async (req, res) => {
   const twiml = new VoiceResponse();
@@ -1007,6 +1226,11 @@ router.post("/process", async (req, res) => {
     twiml.say("Technical error.");
     twiml.hangup();
     return res.type("text/xml").send(twiml.toString());
+  }
+
+  // Initialize attempt tracking
+  if (!call.temp.attemptCount) {
+    call.temp.attemptCount = 0;
   }
 
   if (!SpeechResult && !Digits) {
@@ -1045,27 +1269,57 @@ router.post("/process", async (req, res) => {
   console.log("🧹 CLEANED    :", rawSpeech);
   console.log("🔤 NORMALIZED :", speech);
 
-  if (speech.length > 0 && isConfusedSpeech(speech)) {
-    ask(twiml, call.temp.lastQuestion || "Kripya dobara bolein.", call);
-    await call.save();
-    return res.type("text/xml").send(twiml.toString());
-  }
+  // ✨ Enhanced confusion detection
+  const confusionCheck = detectConfusion(rawSpeech, {
+    step: call.step,
+    lastQuestion: call.temp.lastQuestion
+  });
 
-  if (!speech) {
-    call.temp.retries = (call.temp.retries || 0) + 1;
-
-    if (call.temp.retries >= 3) {
+  if (confusionCheck.isConfused) {
+    console.log("😕 Confusion detected:", confusionCheck.reason);
+    
+    const clarification = handleConfusion(
+      confusionCheck.reason,
+      call.temp.lastQuestion,
+      call
+    );
+    
+    call.temp.attemptCount += 1;
+    
+    // Use smart follow-up after 2 confusion attempts
+    if (call.temp.attemptCount >= 2) {
+      const smartQuestion = getSmartFollowUp({
+        step: call.step,
+        attemptCount: call.temp.attemptCount,
+        lastIntent: call.temp.detectedIntentPrimary,
+        customerData: call.temp.customerData
+      });
+      
+      if (smartQuestion) {
+        ask(twiml, smartQuestion, call);
+        await call.save();
+        return res.type("text/xml").send(twiml.toString());
+      }
+    }
+    
+    // After 3 total confusion attempts, transfer to agent
+    if (call.temp.attemptCount >= 3) {
       twiml.say(
-        "Humein aawaz sunai nahi de rahi. Aapko agent se connect kiya ja raha hai.",
+        { voice: "Polly.Aditi", language: "hi-IN" },
+        "Main aapki baat theek se samajh nahi paa raha. Aapko agent se connect kar raha hoon."
       );
       twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+      await call.save();
       return res.type("text/xml").send(twiml.toString());
     }
-
-    ask(twiml, call.temp.lastQuestion || "Kripya apna jawab bolein.", call);
+    
+    ask(twiml, clarification, call);
     await call.save();
     return res.type("text/xml").send(twiml.toString());
   }
+
+  // Reset attempt count on successful response
+  call.temp.attemptCount = 0;
 
   switch (call.step) {
     case "ask_identifier": {
@@ -1104,11 +1358,13 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        ask(
-          twiml,
-          "Record nahi mila. Kripya chassis number ya registered mobile number dobara boliye.",
-          call,
-        );
+        // Use smart follow-up for chassis number issues
+        const smartQ = getSmartFollowUp({
+          step: 'ask_identifier',
+          attemptCount: call.temp.retries
+        });
+        
+        ask(twiml, smartQ || "Record nahi mila. Kripya chassis number ya mobile number dobara boliye.", call);
         break;
       }
 
@@ -1188,29 +1444,27 @@ router.post("/process", async (req, res) => {
     }
 
     case "ask_complaint_given_by_name": {
-      // Improved name validation
       const cleanedName = normalizePersonName(rawSpeech);
       
       if (!cleanedName || cleanedName.length < 2) {
         call.temp.retries = (call.temp.retries || 0) + 1;
         
         if (call.temp.retries >= 2) {
-          // Use customer's registered name as fallback
           call.temp.complaintGivenByName = call.temp.customerData?.name || "Customer";
           call.temp.retries = 0;
           call.step = "ask_complaint_given_by_phone";
-          ask(twiml, "apna 10 digit contact number batayein", call);
+          ask(twiml, "apna 10 digit contact number btaiye", call);
           break;
         }
         
-        ask(twiml, "Kripya apna poora naam batayein.", call);
+        ask(twiml, "Kripya apna poora naam btaiye.", call);
         break;
       }
       
-      call.temp.complaintGivenByName = rawSpeech; // Store raw speech, will be cleaned later
+      call.temp.complaintGivenByName = rawSpeech;
       call.temp.retries = 0;
       call.step = "ask_complaint_given_by_phone";
-      ask(twiml, "apna 10 digit contact number batayein.", call);
+      ask(twiml, "apna 10 digit contact number btaiye.", call);
       break;
     }
 
@@ -1228,7 +1482,6 @@ router.post("/process", async (req, res) => {
         call.temp.retries = (call.temp.retries || 0) + 1;
         
         if (call.temp.retries >= 2) {
-          // Use registered phone as fallback
           call.temp.complaintGivenByPhone = call.temp.customerData?.phone || "Unknown";
           call.temp.retries = 0;
           call.step = "ask_machine_type";
@@ -1340,7 +1593,6 @@ router.post("/process", async (req, res) => {
     }
 
     case "ask_complaint": {
-      // Store BOTH raw speech and English translation
       call.temp.rawComplaint = rawSpeech;
       call.temp.englishComplaint = translateComplaintToEnglish(rawSpeech);
 
@@ -1354,18 +1606,19 @@ router.post("/process", async (req, res) => {
         call.temp.retries = (call.temp.retries || 0) + 1;
 
         if (call.temp.retries >= 2) {
-          call.temp.retries = 0;
-          ask(
-            twiml,
-            "Kripya bolein: engine, tyre, AC, hydraulic ya electrical.",
-            call,
-          );
+          // Use smart follow-up questions
+          const smartQ = getSmartFollowUp({
+            step: 'ask_complaint',
+            attemptCount: call.temp.retries
+          });
+          
+          ask(twiml, smartQ || "Kripya engine, tyre, AC, hydraulic ya electrical ka problem batayein.", call);
           break;
         }
 
         ask(
           twiml,
-          "Kripya engine, hydraulic, AC, electrical ya tyre ka problem batayein.",
+          "Kripya complaint clear batayein. Engine, hydraulic, AC, electrical ya tyre?",
           call,
         );
         break;
@@ -1380,10 +1633,13 @@ router.post("/process", async (req, res) => {
       if (intent.confidence >= 0.9) {
         call.temp.complaintTitle = intent.primary;
 
-        if (followUpQuestions[intent.primary]) {
+        // Generate smart sub-complaint question
+        const subQuestion = generateSubComplaintQuestion(intent.primary);
+        
+        if (subQuestion) {
           call.step = "ask_sub_complaint";
           call.temp.subRetries = 0;
-          ask(twiml, followUpQuestions[intent.primary].question, call);
+          ask(twiml, subQuestion, call);
         } else {
           call.temp.complaintSubTitle = "Other";
           await saveComplaint(twiml, call, CallSid);
@@ -1416,10 +1672,12 @@ router.post("/process", async (req, res) => {
         const title = call.temp.detectedIntentPrimary;
         call.temp.complaintTitle = title;
 
-        if (followUpQuestions[title]) {
+        const subQuestion = generateSubComplaintQuestion(title);
+        
+        if (subQuestion) {
           call.step = "ask_sub_complaint";
           call.temp.subRetries = 0;
-          ask(twiml, followUpQuestions[title].question, call);
+          ask(twiml, subQuestion, call);
         } else {
           call.temp.complaintSubTitle = "Other";
           await saveComplaint(twiml, call, CallSid);
@@ -1430,7 +1688,7 @@ router.post("/process", async (req, res) => {
       if (isNo) {
         call.step = "ask_complaint";
         call.temp.retries = 0;
-        ask(twiml, "Theek hai, kripay complaint dobara batayein.", call);
+        ask(twiml, "Theek hai, kripya complaint dobara batayein.", call);
         break;
       }
 
@@ -1440,9 +1698,8 @@ router.post("/process", async (req, res) => {
 
     case "ask_sub_complaint": {
       const title = call.temp.complaintTitle;
-      const followUp = followUpQuestions[title];
-
-      if (!followUp) {
+      
+      if (!complaintMap[title] || !complaintMap[title].subTitles) {
         call.temp.complaintSubTitle = "Other";
         await saveComplaint(twiml, call, CallSid);
         break;
@@ -1450,20 +1707,10 @@ router.post("/process", async (req, res) => {
 
       call.temp.subRetries = call.temp.subRetries || 0;
 
-      let detectedSub = null;
-      
-      // Check both normalized speech AND raw speech for better matching
-      const combinedSpeech = speech + " " + rawSpeech;
-      
-      for (const [keyword, subTitle] of Object.entries(followUp.options)) {
-        if (combinedSpeech.includes(keyword)) {
-          detectedSub = subTitle;
-          console.log("✅ Matched sub-complaint:", keyword, "->", subTitle);
-          break;
-        }
-      }
+      // Enhanced sub-complaint detection
+      const subResult = detectSubComplaint(title, speech + " " + rawSpeech);
 
-      if (!detectedSub) {
+      if (!subResult || subResult.confidence < 0.6) {
         call.temp.subRetries += 1;
 
         if (call.temp.subRetries >= 2) {
@@ -1473,11 +1720,13 @@ router.post("/process", async (req, res) => {
           break;
         }
 
-        ask(twiml, followUp.question + " Kripya thoda clear bolein.", call);
+        const subQuestion = generateSubComplaintQuestion(title);
+        ask(twiml, subQuestion + " Thoda aur clear batayein.", call);
         break;
       }
 
-      call.temp.complaintSubTitle = detectedSub;
+      call.temp.complaintSubTitle = subResult.subTitle;
+      console.log("✅ Sub-complaint detected:", subResult.subTitle);
       await saveComplaint(twiml, call, CallSid);
       break;
     }
