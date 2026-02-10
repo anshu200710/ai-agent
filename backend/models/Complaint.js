@@ -44,6 +44,12 @@ const ComplaintSchema = new mongoose.Schema(
 
     machineInstallationDate: {
       type: Date,
+      default: null,  // Changed from undefined to null
+    },
+
+    purchaseDate: {
+      type: Date,
+      default: null,  // Changed from undefined to null
     },
 
     machineType: {

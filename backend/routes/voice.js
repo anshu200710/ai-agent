@@ -760,6 +760,7 @@ const hindiToEnglishMap = {
   'के': 'ke',
 };
 
+// Improved transliteration that preserves more context
 function transliterateHindiToEnglish(text) {
   if (!text) return text;
   
@@ -771,27 +772,33 @@ function transliterateHindiToEnglish(text) {
     result = result.replace(regex, english);
   }
   
-  // Second pass: remove remaining Devanagari characters that couldn't be transliterated
-  // but keep the ASCII parts
-  result = result
-    .split(' ')
-    .map(word => {
-      // If word has both Hindi and English, try to extract English
-      if (/[a-zA-Z]/.test(word) && /[\u0900-\u097F]/.test(word)) {
-        // Extract ASCII part
-        return word.replace(/[\u0900-\u097F]/g, '').trim();
-      }
-      // If pure Hindi and not in map, keep as is (might be transliterated later)
-      if (/[\u0900-\u097F]/.test(word)) {
-        return word;
-      }
-      return word;
-    })
-    .filter(word => word.length > 0)
-    .join(' ');
+  // Second pass: Common Hindi location words
+  const locationMap = {
+    'नगर': 'Nagar',
+    'गांव': 'Gaon',
+    'ग्राम': 'Gram',
+    'शहर': 'Shahar',
+    'मोहल्ला': 'Mohalla',
+    'गली': 'Gali',
+    'सड़क': 'Sadak',
+    'रोड': 'Road',
+    'चौक': 'Chowk',
+    'बाजार': 'Bazaar',
+    'कॉलोनी': 'Colony',
+    'सेक्टर': 'Sector',
+    'टोला': 'Tola',
+    'पुरा': 'Pura',
+    'वाड': 'Wad',
+  };
+  
+  for (const [hindi, english] of Object.entries(locationMap)) {
+    const regex = new RegExp(hindi, 'gi');
+    result = result.replace(regex, english);
+  }
   
   return result.trim();
 }
+
 
 /* =======================
    SMART FOLLOW-UP QUESTIONS
@@ -1560,19 +1567,29 @@ function generateSubComplaintQuestion(mainComplaint) {
 /**
  * Extract pincode from text (6 digits)
  */
+/**
+ * IMPROVED: Extract pincode from text (6 digits OR 5 digits for some areas)
+ */
 function extractPincode(text) {
   if (!text) return null;
   
-  // Remove spaces and extract 6 consecutive digits
+  // First try: Direct 6-digit match
   const cleaned = text.replace(/\s+/g, '');
-  const match = cleaned.match(/\b\d{6}\b/);
+  const match6 = cleaned.match(/\b\d{6}\b/);
   
-  if (match) {
-    console.log("📍 Pincode extracted:", match[0]);
-    return match[0];
+  if (match6) {
+    console.log("📍 Pincode extracted (6-digit):", match6[0]);
+    return match6[0];
   }
   
-  // Try word-to-digit conversion for Hindi numbers
+  // Second try: 5-digit match (some pincodes)
+  const match5 = cleaned.match(/\b\d{5}\b/);
+  if (match5) {
+    console.log("📍 Pincode extracted (5-digit):", match5[0]);
+    return match5[0];
+  }
+  
+  // Third try: Word-to-digit conversion for Hindi numbers
   const words = text.toLowerCase().split(/\s+/);
   let digits = '';
   
@@ -1584,9 +1601,20 @@ function extractPincode(text) {
     }
   }
   
-  if (digits.length === 6) {
+  if (digits.length === 6 || digits.length === 5) {
     console.log("📍 Pincode extracted from words:", digits);
     return digits;
+  }
+  
+  // Fourth try: Extract any number with 5-6 digits from the text
+  const allNumbers = text.match(/\d+/g);
+  if (allNumbers) {
+    for (const num of allNumbers) {
+      if (num.length === 6 || num.length === 5) {
+        console.log("📍 Pincode extracted (loose match):", num);
+        return num;
+      }
+    }
   }
   
   return null;
@@ -1680,7 +1708,7 @@ function extractServiceDate(text) {
 }
 
 /**
- * Extract time from text (e.g., "9 baje", "subah 10", "2 PM")
+ * IMPROVED: Extract time with better context awareness
  */
 function extractTime(text) {
   if (!text) return null;
@@ -1688,36 +1716,106 @@ function extractTime(text) {
   const cleaned = text.toLowerCase().trim();
   
   // Pattern for "X baje" or "X bajay"
-  const bajeMatch = cleaned.match(/(\d{1,2})\s*(baje|bajay|बजे)/i);
+  const bajeMatch = cleaned.match(/(\d{1,2}):?(\d{2})?\s*(baje|bajay|बजे)/i);
   if (bajeMatch) {
     const hour = parseInt(bajeMatch[1]);
+    const minute = bajeMatch[2] || "00";
+    
     if (hour >= 1 && hour <= 12) {
-      // Determine AM/PM from context
-      const isPM = /\bsham\b|\bevening\b|\bशाम\b|\bदोपहर\b|\bafternoon\b/gi.test(cleaned);
-      const formattedHour = isPM && hour < 12 ? hour + 12 : hour;
-      const period = isPM ? 'PM' : 'AM';
-      const displayHour = hour;
-      console.log(`⏰ Time extracted: ${displayHour}:00 ${period}`);
-      return `${displayHour}:00 ${period}`;
+      // IMPROVED PM/AM Detection
+      let period = 'AM';
+      
+      // Check for explicit evening/afternoon/night markers
+      const isPM = /\bsham\b|\bevening\b|\bशाम\b|\bdopahar\b|\bदोपहर\b|\bafternoon\b|\braat\b|\bरात\b|\btop\b|\bटॉप\b/gi.test(cleaned);
+      const isMorning = /\bsubah\b|\bmorning\b|\bसुबह\b/gi.test(cleaned);
+      
+      if (isPM) {
+        period = 'PM';
+      } else if (isMorning) {
+        period = 'AM';
+      } else if (hour >= 1 && hour <= 5) {
+        // 1-5 without context is likely PM (5 PM is common end time)
+        period = 'PM';
+      } else if (hour >= 6 && hour <= 11) {
+        // 6-11 could be morning or evening - default to AM
+        period = 'AM';
+      } else if (hour === 12) {
+        // 12 is noon
+        period = 'PM';
+      }
+      
+      console.log(`⏰ Time extracted: ${hour}:${minute} ${period} (Context: isPM=${isPM}, isMorning=${isMorning})`);
+      return `${hour}:${minute} ${period}`;
     }
   }
   
   // Pattern for "subah/morning"
   if (/\bsubah\b|\bmorning\b|\bसुबह\b/gi.test(cleaned)) {
+    // Try to extract hour if present
+    const hourMatch = cleaned.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hour = parseInt(hourMatch[1]);
+      if (hour >= 1 && hour <= 12) {
+        console.log(`⏰ Time: ${hour}:00 AM (Morning)`);
+        return `${hour}:00 AM`;
+      }
+    }
     console.log("⏰ Time: Morning (9:00 AM)");
     return "9:00 AM";
   }
   
   // Pattern for "dopahar/afternoon"
   if (/\bdopahar\b|\bafternoon\b|\bदोपहर\b/gi.test(cleaned)) {
+    const hourMatch = cleaned.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hour = parseInt(hourMatch[1]);
+      if (hour >= 1 && hour <= 12) {
+        console.log(`⏰ Time: ${hour}:00 PM (Afternoon)`);
+        return `${hour}:00 PM`;
+      }
+    }
     console.log("⏰ Time: Afternoon (2:00 PM)");
     return "2:00 PM";
   }
   
   // Pattern for "sham/evening"
   if (/\bsham\b|\bevening\b|\bशाम\b/gi.test(cleaned)) {
+    const hourMatch = cleaned.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hour = parseInt(hourMatch[1]);
+      if (hour >= 1 && hour <= 12) {
+        console.log(`⏰ Time: ${hour}:00 PM (Evening)`);
+        return `${hour}:00 PM`;
+      }
+    }
     console.log("⏰ Time: Evening (5:00 PM)");
     return "5:00 PM";
+  }
+  
+  // Pattern for "raat/night"
+  if (/\braat\b|\bnight\b|\bरात\b/gi.test(cleaned)) {
+    const hourMatch = cleaned.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hour = parseInt(hourMatch[1]);
+      if (hour >= 1 && hour <= 12) {
+        console.log(`⏰ Time: ${hour}:00 PM (Night)`);
+        return `${hour}:00 PM`;
+      }
+    }
+    console.log("⏰ Time: Night (8:00 PM)");
+    return "8:00 PM";
+  }
+  
+  // Pattern for "top" (common Hindi slang for evening)
+  if (/\btop\b|\bटॉप\b/gi.test(cleaned)) {
+    const hourMatch = cleaned.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hour = parseInt(hourMatch[1]);
+      if (hour >= 1 && hour <= 12) {
+        console.log(`⏰ Time: ${hour}:00 PM (Top/Evening)`);
+        return `${hour}:00 PM`;
+      }
+    }
   }
   
   // Pattern for direct time like "9 AM", "2 PM", "14:00"
@@ -1725,15 +1823,124 @@ function extractTime(text) {
   if (directTimeMatch) {
     const hour = parseInt(directTimeMatch[1]);
     const minute = directTimeMatch[2] || "00";
-    const period = directTimeMatch[3] || (hour >= 12 ? "PM" : "AM");
+    let period = directTimeMatch[3];
     
-    if (hour >= 1 && hour <= 24) {
-      console.log(`⏰ Time extracted: ${hour}:${minute} ${period.toUpperCase()}`);
-      return `${hour}:${minute} ${period.toUpperCase()}`;
+    if (!period) {
+      // Auto-detect AM/PM based on hour
+      if (hour >= 1 && hour <= 11) {
+        period = "AM";
+      } else if (hour === 12) {
+        period = "PM";
+      } else if (hour >= 13 && hour <= 23) {
+        // 24-hour format
+        const convertedHour = hour - 12;
+        console.log(`⏰ Time extracted (24hr converted): ${convertedHour}:${minute} PM`);
+        return `${convertedHour}:${minute} PM`;
+      }
+    }
+    
+    if (hour >= 1 && hour <= 12) {
+      console.log(`⏰ Time extracted: ${hour}:${minute} ${period ? period.toUpperCase() : 'AM'}`);
+      return `${hour}:${minute} ${period ? period.toUpperCase() : 'AM'}`;
     }
   }
   
   return null;
+}
+
+/* =======================
+   ENHANCED LOGGING SYSTEM
+======================= */
+
+/**
+ * Log call session data in a structured format
+ */
+function logCallSession(step, data) {
+  const timestamp = new Date().toISOString();
+  console.log("\n" + "=".repeat(80));
+  console.log(`📞 CALL SESSION LOG - ${timestamp}`);
+  console.log(`📍 Step: ${step}`);
+  console.log("=".repeat(80));
+  
+  if (data.callSid) {
+    console.log(`🆔 Call SID: ${data.callSid}`);
+  }
+  
+  if (data.from) {
+    console.log(`📱 From: ${data.from}`);
+  }
+  
+  if (data.speech) {
+    console.log("\n💬 SPEECH INPUT:");
+    console.log(`   Raw: ${data.speech.raw || 'N/A'}`);
+    console.log(`   Cleaned: ${data.speech.cleaned || 'N/A'}`);
+    console.log(`   Transliterated: ${data.speech.transliterated || 'N/A'}`);
+    console.log(`   Intent: ${data.speech.intent || 'N/A'}`);
+  }
+  
+  if (data.extracted) {
+    console.log("\n🔍 EXTRACTED DATA:");
+    Object.entries(data.extracted).forEach(([key, value]) => {
+      console.log(`   ${key}: ${value}`);
+    });
+  }
+  
+  if (data.validation) {
+    console.log("\n✅ VALIDATION:");
+    console.log(`   Status: ${data.validation.status}`);
+    if (data.validation.errors) {
+      console.log(`   Errors: ${data.validation.errors.join(', ')}`);
+    }
+  }
+  
+  if (data.nextAction) {
+    console.log(`\n➡️  Next Action: ${data.nextAction}`);
+  }
+  
+  console.log("=".repeat(80) + "\n");
+}
+
+/**
+ * Log complaint submission details
+ */
+function logComplaintSubmission(complaintData, externalResult, dbResult) {
+  const timestamp = new Date().toISOString();
+  console.log("\n" + "=".repeat(80));
+  console.log(`💾 COMPLAINT SUBMISSION LOG - ${timestamp}`);
+  console.log("=".repeat(80));
+  
+  console.log("\n📋 COMPLAINT DETAILS:");
+  console.log(`   Machine No: ${complaintData.machine_no}`);
+  console.log(`   Customer: ${complaintData.customer_name}`);
+  console.log(`   Caller: ${complaintData.caller_name} (${complaintData.caller_no})`);
+  console.log(`   Title: ${complaintData.complaint_title}`);
+  console.log(`   Sub-title: ${complaintData.sub_title}`);
+  console.log(`   Status: ${complaintData.machine_status}`);
+  console.log(`   Location Type: ${complaintData.job_location}`);
+  console.log(`   Address: ${complaintData.machine_location_address || 'N/A'}`);
+  console.log(`   Pincode: ${complaintData.pincode || 'N/A'}`);
+  console.log(`   Branch: ${complaintData.branch} - ${complaintData.outlet}`);
+  console.log(`   Service Date: ${complaintData.service_date || 'N/A'}`);
+  console.log(`   Time Window: ${complaintData.from_time || 'N/A'} to ${complaintData.to_time || 'N/A'}`);
+  console.log(`   Details: ${complaintData.complaint_details}`);
+  
+  console.log("\n🌐 EXTERNAL API RESULT:");
+  console.log(`   Success: ${externalResult.success ? '✅ Yes' : '❌ No'}`);
+  if (externalResult.success) {
+    console.log(`   SAP ID: ${externalResult.sapId || 'Not returned'}`);
+  } else {
+    console.log(`   Error: ${externalResult.error}`);
+  }
+  
+  console.log("\n💿 DATABASE RESULT:");
+  console.log(`   Success: ${dbResult.success ? '✅ Yes' : '❌ No'}`);
+  if (dbResult.success) {
+    console.log(`   DB ID: ${dbResult.id}`);
+  } else {
+    console.log(`   Error: ${dbResult.error}`);
+  }
+  
+  console.log("=".repeat(80) + "\n");
 }
 
 function detectBranchAndOutlet(city) {
@@ -1820,24 +2027,15 @@ async function fetchCustomerFromExternal({ phone, chassisNo }) {
 
 async function submitComplaintToExternal(complaintData) {
   try {
-    const enhancedData = {
-      ...complaintData,
-      job_close_lat: complaintData.job_close_lat || "0.000000",
-      job_close_lng: complaintData.job_close_lng || "0.000000",
-      job_open_lat: complaintData.job_open_lat || "0.000000",
-      job_open_lng: complaintData.job_open_lng || "0.000000",
-      complaint_details: transliterateHindiToEnglish(complaintData.complaint_details || "")
-    };
-
     console.log(
       `🌐 Submitting complaint to external API: ${COMPLAINT_API_URL}`,
     );
     console.log(
-      "📦 Enhanced complaint payload:",
-      JSON.stringify(enhancedData, null, 2),
+      "📦 Complaint payload (final):",
+      JSON.stringify(complaintData, null, 2),
     );
 
-    const response = await axios.post(COMPLAINT_API_URL, enhancedData, {
+    const response = await axios.post(COMPLAINT_API_URL, complaintData, {
       timeout: API_TIMEOUT,
       headers: {
         "Content-Type": "application/json",
@@ -1942,20 +2140,86 @@ function normalizeText(text) {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+
 function safeAscii(text) {
   if (!text) return "Unknown";
   
+  // First transliterate common Hindi words
   const transliterated = transliterateHindiToEnglish(text);
   
+  // Use a more sophisticated approach for remaining Devanagari
   const cleaned = transliterated
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x00-\x7F]/g, " ")
-    .replace(/\s+/g, " ")
+    .split(/\s+/)
+    .map(word => {
+      // If word still has Devanagari, try to preserve it phonetically
+      if (/[\u0900-\u097F]/.test(word)) {
+        // Keep words that are likely names (capitalized or proper nouns)
+        // For now, transliterate to closest ASCII approximation
+        return word
+          .replace(/[\u0900-\u097F]/g, (char) => {
+            // Basic Devanagari to Latin mapping (simplified)
+            const devanagariMap = {
+              'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'ng',
+              'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'ny',
+              'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+              'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+              'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
+              'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh',
+              'ष': 'sh', 'स': 's', 'ह': 'h',
+              'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u',
+              'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au',
+              'ं': 'n', 'ः': 'h', '्': '',
+              'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee', 'उ': 'u',
+              'ऊ': 'oo', 'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au',
+            };
+            return devanagariMap[char] || '';
+          })
+          .replace(/\s+/g, '');
+      }
+      return word;
+    })
+    .filter(word => word.length > 0)
+    .join(' ')
     .trim();
   
   return cleaned || "Unknown";
 }
+
+
+
+//  Enhanced location extraction
+function extractLocationAddress(text) {
+  if (!text) return { address: "Unknown", pincode: "" };
+  
+  const pincode = extractPincode(text);
+  
+  // Remove common filler words but preserve location names
+  const fillerWords = ['meri', 'मेरी', 'machine', 'मशीन', 'hai', 'है', 'par', 'पर'];
+  
+  let cleanedText = text;
+  for (const filler of fillerWords) {
+    cleanedText = cleanedText.replace(new RegExp(`\\b${filler}\\b`, 'gi'), ' ');
+  }
+  
+  cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+  
+  // Transliterate to English
+  const addressEnglish = safeAscii(cleanedText);
+  
+  console.log("📍 Location extraction:");
+  console.log("   Raw:", text);
+  console.log("   Cleaned:", cleanedText);
+  console.log("   English:", addressEnglish);
+  console.log("   Pincode:", pincode || "Not found");
+  
+  return {
+    address: addressEnglish,
+    pincode: pincode || ""
+  };
+}
+
 
 function getCallerName(call, customerData) {
   const spokenName = extractName(call.temp.complaintGivenByName);
@@ -1972,15 +2236,21 @@ function getCallerName(call, customerData) {
 
   return "Not Provided";
 }
-
+/**
+ * Format date for external API, handle "NA" values
+ */
 function formatDateForExternal(date) {
-  if (!date) return "";
-  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return date;
+  if (!date || date === "NA" || date === "N/A") return null;
+  
+  if (typeof date === "string") {
+    // Check if already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
   }
 
   const d = new Date(date);
-  if (isNaN(d.getTime())) return "";
+  if (isNaN(d.getTime())) return null;
 
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -2087,8 +2357,8 @@ async function saveComplaint(twiml, call, CallSid) {
         subModel: customer.subModel || "NA",
         machineType: customer.machineType,
         businessPartnerCode: customer.businessPartnerCode || "NA",
-        purchaseDate: customer.purchaseDate || "NA",
-        installationDate: customer.installationDate || "NA",
+        purchaseDate: customer.purchaseDate || null,
+        installationDate: customer.installationDate || null,
       };
       console.log("✅ Customer data retrieved from database");
     } catch (error) {
@@ -2105,10 +2375,9 @@ async function saveComplaint(twiml, call, CallSid) {
 
   const branchOutlet = detectBranchAndOutlet(customerData.city);
 
-  const installationDate =
-    formatDateForExternal(customerData.installationDate) ||
-    formatDateForExternal(customerData.purchaseDate) ||
-    "";
+  // Format dates properly, convert "NA" to null
+  const installationDate = formatDateForExternal(customerData.installationDate);
+  const purchaseDate = formatDateForExternal(customerData.purchaseDate);
   
   const callerNameFinal = getCallerName(call, customerData);
 
@@ -2127,61 +2396,116 @@ async function saveComplaint(twiml, call, CallSid) {
                         ? call.temp.complaintSubTitle 
                         : "Other";
 
-  console.log("🔍 Final processed data:");
-  console.log("   Caller Name:", callerNameFinal);
-  console.log("   Caller Phone:", callerPhoneFinal);
-  console.log("   Complaint Title:", call.temp.complaintTitle);
-  console.log("   Subtitle:", finalSubTitle);
-  console.log("   Details (English):", complaintDetailsEnglish);
-  console.log("   Details (Raw):", call.temp.rawComplaint);
+  // Get location and timing data
+  const machineLocationAddress = call.temp.machineLocationAddress || "Not Provided";
+  const machineLocationPincode = call.temp.machineLocationPincode || "";
+  const serviceDate = call.temp.serviceDate || null;
+  const fromTime = call.temp.serviceTimeFrom || "";
+  const toTime = call.temp.serviceTimeTo || "";
 
+  // ========================================
+  // EXTERNAL API PAYLOAD - EXACT SEQUENCE AS REQUIRED
+  // ========================================
   const complaintApiData = {
+    // 1. Machine Number *
     machine_no: customerData.chassisNo || "Unknown",
+    
+    // 2. Customer Name *
     customer_name: safeAscii(customerData.name),
+    
+    // 3. Complaint given by (Name) *
     caller_name: callerNameFinal,
-    contact_person: callerNameFinal,
+    
+    // 4. Complaint given by (Phone Number) *
     caller_no: callerPhoneFinal,
+    
+    // 5. Contact Person Number
+    contact_person: callerNameFinal,
+    contact_person_number: callerPhoneFinal,
+    
+    // 6. Machine Model *
     machine_model: customerData.machineType || "Unknown",
+    
+    // 7. Machine Sub Model *
     sub_model: customerData.model || "NA",
-    installation_date: installationDate,
+    
+    // 8. Machine Installation Date *
+    installation_date: installationDate || purchaseDate || "",
+    
+    // 9. Machine Type *
     machine_type: call.temp.machineType || "Warranty",
+    
+    // 10. Complain by *
     complain_by: "Customer",
+    
+    // 11. Machine Status *
     machine_status: call.temp.machineStatus || "Unknown",
+    
+    // 12. Job Location *
     job_location: call.temp.jobLocation || "Onsite",
+    
+    // 13. Machine Location Address (NEW)
+    machine_location_address: machineLocationAddress,
+    
+    // 14. Pincode (NEW)
+    pincode: machineLocationPincode,
+    
+    // 15. From Time *
+    from_time: fromTime,
+    
+    // 16. To Time *
+    to_time: toTime,
+    
+    // 17. Service Date (NEW)
+    service_date: serviceDate ? formatDateForExternal(serviceDate) : "",
+    
+    // 18. Branch *
     branch: branchOutlet.branch,
+    
+    // 19. Outlet *
     outlet: branchOutlet.outlet,
+    
+    // 20. City ID
     city_id: branchOutlet.cityCode,
+    
+    // 21. Details of Complaint *
     complaint_details: complaintDetailsEnglish,
+    
+    // 22. Complaint Title *
     complaint_title: call.temp.complaintTitle || "NA",
+    
+    // 23. Sub Title *
     sub_title: finalSubTitle,
+    
+    // 24. Business Partner Code
     business_partner_code: customerData.businessPartnerCode || "NA",
-    // job_close_lat: customerData.job_close_lat || "0.000000",
-    // job_close_lng: customerData.job_close_lng || "0.000000",
-    // job_open_lat: customerData.job_open_lat || "0.000000",
-    // job_open_lng: customerData.job_open_lng || "0.000000",
+    
+    // 25. SAP ID (initially NA)
     complaint_sap_id: "NA",
+    
+    // CRITICAL: Lat/Lng fields (must be included or API fails)
+    job_close_lat: "0.000000",
+    job_close_lng: "0.000000",
+    job_open_lat: "0.000000",
+    job_open_lng: "0.000000",
   };
 
-  console.log("🌐 Submitting complaint to external API...");
+  console.log("\n" + "=".repeat(80));
+  console.log("🌐 SUBMITTING TO EXTERNAL API");
+  console.log("=".repeat(80));
+  console.log(JSON.stringify(complaintApiData, null, 2));
+  console.log("=".repeat(80) + "\n");
+
   const externalResult = await submitComplaintToExternal(complaintApiData);
 
   let sapId = null;
   if (externalResult.success) {
     sapId = externalResult.sapId;
-    if (sapId) {
-      console.log(
-        `✅ External API submission successful with SAP ID: ${sapId}`,
-      );
-    } else {
-      console.log("✅ External API submission successful (no SAP ID returned)");
-    }
-  } else {
-    console.error(
-      `❌ External API submission failed: ${externalResult.error || "Unknown error"}`,
-    );
-    console.log("⚠️  Continuing with local database save...");
   }
 
+  // ========================================
+  // LOCAL DATABASE PAYLOAD
+  // ========================================
   const complaintDbData = {
     customerId: call.temp.customerId,
     machineNo: customerData.chassisNo || "Unknown",
@@ -2189,10 +2513,13 @@ async function saveComplaint(twiml, call, CallSid) {
     customerName: safeAscii(customerData.name),
     registeredPhone: customerData.phone || "Unknown",
     machineModel: customerData.model || "Unknown",
-    subModel: customerData.subModel || "NA",
+    machineSubModel: customerData.subModel || "NA",
     machineType: call.temp.machineType || "Warranty",
-    purchaseDate: customerData.purchaseDate || "NA",
-    installationDate: customerData.installationDate || "NA",
+    
+    // FIX: Handle dates properly - use null instead of "NA"
+    purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+    machineInstallationDate: installationDate ? new Date(installationDate) : null,
+    
     businessPartnerCode: customerData.businessPartnerCode || "NA",
     complaintGivenByName: callerNameFinal,
     complaintGivenByPhone: callerPhoneFinal,
@@ -2200,7 +2527,6 @@ async function saveComplaint(twiml, call, CallSid) {
     jobLocation: call.temp.jobLocation || "Onsite",
     branch: branchOutlet.branch,
     outlet: branchOutlet.outlet,
-    city_id: branchOutlet.cityCode,
     description_raw: complaintDetailsEnglish,
     complaintTitle: call.temp.complaintTitle || "NA",
     complaintSubTitle: finalSubTitle,
@@ -2208,31 +2534,59 @@ async function saveComplaint(twiml, call, CallSid) {
     callSid: CallSid,
     source: "IVR_VOICE_BOT",
     complainBy: "Customer",
+    
+    // NEW FIELDS
+    machineLocationAddress: machineLocationAddress,
+    machineLocationPincode: machineLocationPincode,
+    serviceDate: serviceDate,
+    fromTime: fromTime,
+    toTime: toTime,
   };
 
+  let dbResult = { success: false, error: null, id: null };
+  
   try {
     console.log("💾 Saving complaint to local database...");
     const savedComplaint = await Complaint.create(complaintDbData);
-    console.log(
-      `✅ Complaint saved to database with ID: ${savedComplaint._id}`,
-    );
+    dbResult = {
+      success: true,
+      id: savedComplaint._id.toString()
+    };
+    console.log(`✅ Complaint saved to database with ID: ${savedComplaint._id}`);
   } catch (dbError) {
     console.error("❌ Failed to save complaint to database:", dbError.message);
+    console.error("Full error:", dbError);
+    dbResult = {
+      success: false,
+      error: dbError.message
+    };
   }
+
+  // ENHANCED LOGGING
+  logComplaintSubmission(complaintApiData, externalResult, dbResult);
 
   call.step = "done";
   
+  // Enhanced confirmation message
+  let confirmationMessage = "Dhanyavaad. Aapki complaint register ho gayi hai.";
+  
   if (sapId) {
-    twiml.say(
-      { voice: "Polly.Aditi", language: "hi-IN" },
-      `Dhanyavaad. Aapki complaint successfully register ho gayi hai. Complaint number ${sapId} hai. Hamari team jaldi hi aapko contact karegi.`,
-    );
-  } else {
-    twiml.say(
-      { voice: "Polly.Aditi", language: "hi-IN" },
-      "Dhanyavaad. Aapki complaint register ho gayi hai. Hamari team jaldi hi aapko contact karegi.",
-    );
+    confirmationMessage = `Dhanyavaad. Aapki complaint successfully register ho gayi hai. Complaint number ${sapId} hai.`;
   }
+  
+  if (fromTime && toTime && serviceDate) {
+    const dateStr = serviceDate.toDateString() === new Date().toDateString() ? "aaj" : 
+                    serviceDate.toDateString() === new Date(Date.now() + 86400000).toDateString() ? "kal" :
+                    serviceDate.getDate() + " tareekh ko";
+    confirmationMessage += ` Engineer ${dateStr} ${fromTime} se ${toTime} ke beech aayega.`;
+  } else {
+    confirmationMessage += " Hamari team jaldi hi aapko contact karegi.";
+  }
+  
+  twiml.say(
+    { voice: "Polly.Aditi", language: "hi-IN" },
+    confirmationMessage
+  );
   
   twiml.hangup();
 }
@@ -2667,11 +3021,30 @@ router.post("/process", async (req, res) => {
 
     // ========== NEW CASE: ASK MACHINE LOCATION ADDRESS ==========
     case "ask_machine_location_address": {
+      logCallSession("ask_machine_location_address", {
+        callSid: CallSid,
+        from: call.from,
+        speech: {
+          raw: SpeechResult,
+          cleaned: rawSpeech,
+          transliterated: transliteratedSpeech,
+          intent: userIntent
+        }
+      });
+      
       console.log("📍 Processing machine location address...");
       
       // Check for vague responses
       if (isVagueLocationResponse(rawSpeech)) {
         call.temp.retries = (call.temp.retries || 0) + 1;
+        
+        logCallSession("location_validation_failed", {
+          validation: {
+            status: "FAILED",
+            errors: ["Vague response detected"]
+          },
+          nextAction: call.temp.retries >= 2 ? "Skip and continue" : "Re-prompt"
+        });
         
         if (call.temp.retries >= 2) {
           // After 2 retries, move forward with "Unknown"
@@ -2686,25 +3059,29 @@ router.post("/process", async (req, res) => {
         // Re-prompt with clearer instruction
         ask(
           twiml, 
-          "Kripya apni machine ke location ka full address bataye. Jaise: gram, tehsil, shahar aur pincode. Agar yaad nahi hai to workshop ka naam ya site ka naam batayein.",
+          "Kripya apni machine ke location ka full address bataye. Jaise: sector number, area name, shahar ka naam aur pincode. Agar yaad nahi hai to bas area ya site ka naam batayein.",
           call
         );
         break;
       }
       
-      // Extract pincode
-      const pincode = extractPincode(rawSpeech);
+      // Extract location data
+      const locationData = extractLocationAddress(rawSpeech);
       
-      // Save the full address (transliterated for database)
-      const addressEnglish = safeAscii(rawSpeech);
-      
-      call.temp.machineLocationAddress = addressEnglish;
-      call.temp.machineLocationPincode = pincode || "";
+      call.temp.machineLocationAddress = locationData.address;
+      call.temp.machineLocationPincode = locationData.pincode;
       call.temp.retries = 0;
       
-      console.log("✅ Machine Location saved:");
-      console.log("   Address:", addressEnglish);
-      console.log("   Pincode:", pincode || "Not provided");
+      logCallSession("location_extracted", {
+        extracted: {
+          "Full Address": locationData.address,
+          "Pincode": locationData.pincode || "Not provided"
+        },
+        validation: {
+          status: "SUCCESS"
+        },
+        nextAction: "Move to complaint question"
+      });
       
       // Move to complaint question
       call.step = "ask_complaint";
@@ -2937,6 +3314,15 @@ router.post("/process", async (req, res) => {
 
     // ========== NEW CASE: ASK SERVICE TIME TO ==========
     case "ask_service_time_to": {
+      logCallSession("ask_service_time_to", {
+        callSid: CallSid,
+        speech: {
+          raw: SpeechResult,
+          cleaned: rawSpeech,
+          transliterated: transliteratedSpeech
+        }
+      });
+      
       console.log("⏰ Processing to time...");
       
       const toTime = extractTime(rawSpeech);
@@ -2948,19 +3334,37 @@ router.post("/process", async (req, res) => {
           // Default to 5:00 PM
           call.temp.serviceTimeTo = "5:00 PM";
           call.temp.retries = 0;
+          
+          logCallSession("time_extraction_failed_using_default", {
+            extracted: {
+              "To Time": "5:00 PM (default)"
+            },
+            nextAction: "Save complaint"
+          });
+          
           // NOW save the complaint
           await saveComplaint(twiml, call, CallSid);
           break;
         }
         
-        ask(twiml, "Kripya clearly time batayein. Jaise: sham 5 baje, raat 8 baje.", call);
+        ask(twiml, "Kripya clearly time batayein. Jaise: sham 5 baje, raat 7 baje, 6 PM.", call);
         break;
       }
       
       call.temp.serviceTimeTo = toTime;
       call.temp.retries = 0;
       
-      console.log("✅ To time saved:", toTime);
+      logCallSession("time_extracted", {
+        extracted: {
+          "From Time": call.temp.serviceTimeFrom,
+          "To Time": toTime,
+          "Service Date": call.temp.serviceDate
+        },
+        validation: {
+          status: "SUCCESS"
+        },
+        nextAction: "Save complaint"
+      });
       
       // All information collected, now save
       await saveComplaint(twiml, call, CallSid);
