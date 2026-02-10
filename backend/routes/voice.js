@@ -325,10 +325,20 @@ const cityToBranchMap = {
 const complaintMap = {
   "AC System": {
     keywords: [
-      "ac", "एसी", "ऐसी", "एकसी", "ए सी", "ए.सी", 
+      "ac", "एसी", "ऐसी", "एकसी", "ए सी", "ए.सी", "एक", "ए",
       "cooling", "ठंडा", "कूलिंग", "ठंडी", "कूल", "ठंड"
     ],
     priority: 10,
+    patterns: [
+      /\bac\b/i,
+      /एसी/i,
+      /air.*condition/i,
+      /cooling.*nahi/i,
+      /ठंडा.*नहीं/i,
+      /thanda.*nahi/i,
+      /gas.*khatam/i,
+      /compressor/i,
+    ],
     subTitles: {
       "AC not Working": [
         "नहीं चल", "band", "बंद", "काम नहीं", "work नहीं", 
@@ -389,6 +399,17 @@ const complaintMap = {
     "बिजली", "बैटरी", "लाइट", "वायरिंग", "self", "सेल्फ"
   ],
   priority: 6,
+  patterns: [
+      /electrical/i,
+      /electric/i,
+      /इलेक्ट्रिकल/i,
+      /battery/i,
+      /बैटरी/i,
+      /light.*nahi.*jal.*rahi/i,
+      /लाइट.*नहीं/i,
+      /horn.*nahi.*baj.*raha/i,
+      /wire.*problem/i,
+    ],
   subTitles: {
     "Starting trouble": [
       "start problem", "start नहीं हो रही", "स्टार्ट दिक्कत", 
@@ -425,8 +446,33 @@ const complaintMap = {
 },
 
   "Engine": {
-    keywords: ["engine", "इंजन", "smoke", "overheat", "धुआ", "गरम", 
-    "इंडियन", "motor", "मोटर", "power", "पावर"],
+    keywords: [
+      // Hindi words
+      'इंजन', 'engine', 'enjin', 'motor',
+      // Common issues
+      'start', 'starting', 'स्टार्ट', 'chalu', 'चालू',
+      'band', 'बंद', 'off', 'rukh',
+      'smoke', 'धुआं', 'dhua', 'dhuaan',
+      'sound', 'awaaz', 'आवाज', 'shor', 'शोर', 'noise',
+      'oil', 'तेल', 'tel', 'leak', 'leakage',
+      'overheating', 'गरम', 'garam', 'heat', 'heating',
+      'power', 'pickup', 'kam', 'कम', 'weak', 'kamzor',
+    ],
+    patterns: [
+      /engine/i,
+      /इंजन/i,
+      /enjin/i,
+      /start.*nahi.*ho.*raha/i,
+      /स्टार्ट.*नहीं/i,
+      /chalu.*nahi/i,
+      /band.*ho.*gaya/i,
+      /awaaz.*aa.*rahi/i,
+      /आवाज.*आ.*रही/i,
+      /smoke.*aa.*raha/i,
+      /धुआं/i,
+      /गरम.*ho.*raha/i,
+      /oil.*leak/i,
+    ],
     priority: 8,
     subTitles: {
     "Starting trouble": [
@@ -524,6 +570,18 @@ const complaintMap = {
   "Hydraulic": {
     keywords: ["hydraulic", "हाइड्रोलिक", "pressure", "pump", "प्रेशर", "पंप"],
     priority: 7,
+    patterns: [
+      /hydraulic/i,
+      /हाइड्रोलिक/i,
+      /hidrolik/i,
+      /boom.*nahi.*uth.*raha/i,
+      /bucket.*kam.*nahi.*kar.*raha/i,
+      /lift.*nahi.*ho.*raha/i,
+      /slow.*ho.*gaya/i,
+      /धीमा/i,
+      /weak/i,
+      /pump.*problem/i,
+    ],
     subTitles: {
       "Abnormal sound": ["sound", "noise", "आवाज"],
       "Control Valve leakage": ["control valve", "valve leak"],
@@ -580,6 +638,17 @@ const complaintMap = {
   "Tyre/Battery": {
     keywords: ["tyre", "tire", "battery", "puncture", "टायर", "बैटरी", "पंक्चर"],
     priority: 6,
+    patterns: [
+      /tyre/i,
+      /tire/i,
+      /टायर/i,
+      /puncture/i,
+      /पंचर/i,
+      /wheel.*problem/i,
+      /air.*nahi/i,
+      /हवा.*नहीं/i,
+      /flat/i,
+    ],
     subTitles: {
       "Battery problem": ["battery", "बैटरी", "dead"],
       "Tube joint opened": ["tube joint", "tube खुला"],
@@ -658,7 +727,24 @@ const complaintMap = {
       "Campaign Visit": ["campaign"],
       "FSI": ["fsi", "एफएसआई"]
     }
-  }
+  },
+  Brake: {
+    keywords: [
+      'brake', 'ब्रेक', 'break',
+      'stop', 'रोक', 'rok',
+      'kam', 'कम', 'weak',
+      'fail', 'फेल',
+    ],
+    patterns: [
+      /brake/i,
+      /ब्रेक/i,
+      /break/i,
+      /brake.*nahi.*lag.*raha/i,
+      /brake.*weak/i,
+      /stop.*nahi.*ho.*raha/i,
+    ],
+    subTitles: ["Brake Not Working", "Weak Braking", "Brake Noise", "Other"]
+  },
 };
 
 /* =======================
@@ -842,112 +928,178 @@ const smartFollowUpQuestions = {
 /* =======================
    ENHANCED COMPLAINT DETECTION WITH PRIORITY
 ======================= */
-function detectComplaintIntent(text, previousContext = {}) {
-  if (!text) return null;
-
+// IMPROVED: More comprehensive complaint detection
+function detectComplaint(text) {
+  console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", text);
+  
+  if (!text || text.trim().length < 3) {
+    console.log("   ❌ Text too short");
+    return { primary: null, confidence: 0 };
+  }
+  
   const textLower = text.toLowerCase();
-  const matches = [];
-  const confidenceScores = {};
-
-  console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", textLower);
-
-  // Special AC detection - very high priority
-  const acPatterns = [
-    /\bac\b/gi,
-    /\bएसी\b/gi,
-    /\bऐसी\b/gi,
-    /\bए\.सी\b/gi,
-    /\bए\s+सी\b/gi,
-    /\bcooling\b/gi,
-    /\bकूलिंग\b/gi,
-    /\bठंडा\b/gi,
-    /\bठंडी\b/gi,
-    /\bठंड\b/gi,
-    /\bthanda\b/gi,
-    /\bthand\b/gi
-  ];
-
-  let hasACMention = false;
-  for (const pattern of acPatterns) {
-    if (pattern.test(text)) {
-      hasACMention = true;
-      console.log("   ✅ AC pattern matched:", pattern);
-      break;
-    }
-  }
-
-  // If AC mentioned, give it top priority
-  if (hasACMention) {
-    console.log("🎯 AC DETECTED - High Priority Match!");
-    matches.push("AC System");
-    confidenceScores["AC System"] = 100;
-  }
-
-  // Check against all other complaint categories
-  for (const [title, data] of Object.entries(complaintMap)) {
-    if (title === "AC System" && hasACMention) continue;
-
-    let matchScore = 0;
+  const scores = {};
+  
+  // Calculate scores for each complaint type
+  for (const [complaintType, config] of Object.entries(complaintMap)) {
+    let score = 0;
     let matchedKeywords = [];
-    const priority = data.priority || 1;
-
-    // Check main keywords
-    for (const keyword of data.keywords) {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      if (regex.test(text)) {
-        matchScore += (2 * priority);
+    
+    // Check keywords
+    for (const keyword of config.keywords) {
+      if (textLower.includes(keyword.toLowerCase())) {
+        score += 2;
         matchedKeywords.push(keyword);
       }
     }
-
-    // Check sub-title keywords
-    if (data.subTitles) {
-      for (const [subTitle, subKeywords] of Object.entries(data.subTitles)) {
-        for (const subKeyword of subKeywords) {
-          const regex = new RegExp(`\\b${subKeyword}\\b`, 'gi');
-          if (regex.test(text)) {
-            matchScore += (3 * priority);
-            matchedKeywords.push(subKeyword);
-          }
-        }
+    
+    // Check patterns (worth more)
+    for (const pattern of config.patterns) {
+      if (pattern.test(text)) {
+        score += 5;
+        matchedKeywords.push(pattern.toString());
       }
     }
-
-    if (matchScore > 0 && title !== "AC System") {
-      matches.push(title);
-      confidenceScores[title] = matchScore;
+    
+    if (score > 0) {
+      scores[complaintType] = { score, matchedKeywords };
+      console.log(`   ✓ ${complaintType}: ${score} (matched: ${matchedKeywords.slice(0, 3).join(', ')})`);
     }
   }
-
-  if (matches.length === 0) {
-    console.log("   ❌ No complaint categories matched");
-    return null;
+  
+  // Find highest score
+  let bestMatch = null;
+  let highestScore = 0;
+  
+  for (const [type, data] of Object.entries(scores)) {
+    if (data.score > highestScore) {
+      highestScore = data.score;
+      bestMatch = type;
+    }
   }
-
-  // Sort by confidence score
-  matches.sort((a, b) => confidenceScores[b] - confidenceScores[a]);
-
-  const topScore = confidenceScores[matches[0]];
-  const confidence = topScore >= 100 ? 0.99 : 
-                     topScore >= 50 ? 0.95 : 
-                     topScore >= 20 ? 0.85 : 
-                     topScore >= 10 ? 0.75 : 0.6;
-
-  console.log("🔍 Complaint Detection Results:");
-  console.log("   Matches:", matches);
-  console.log("   Scores:", confidenceScores);
-  console.log("   Top Match:", matches[0], "Score:", topScore, "Confidence:", confidence);
-
+  
+  if (!bestMatch) {
+    console.log("   ❌ No complaint categories matched");
+    return { primary: null, confidence: 0 };
+  }
+  
+  // Calculate confidence (0-1)
+  const confidence = Math.min(highestScore / 10, 1);
+  
+  console.log(`   ✅ DETECTED: ${bestMatch} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+  
   return {
-    primary: matches[0],
-    secondary: matches.slice(1, 3),
+    primary: bestMatch,
     confidence: confidence,
-    matchedKeywords: matches.map(m => ({
-      title: m,
-      score: confidenceScores[m]
-    }))
+    matchedKeywords: scores[bestMatch].matchedKeywords
   };
 }
+// function detectComplaintIntent(text, previousContext = {}) {
+//   if (!text) return null;
+
+//   const textLower = text.toLowerCase();
+//   const matches = [];
+//   const confidenceScores = {};
+
+//   console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", textLower);
+
+//   // Special AC detection - very high priority
+//   const acPatterns = [
+//     /\bac\b/gi,
+//     /\bएसी\b/gi,
+//     /\bऐसी\b/gi,
+//     /\bए\.सी\b/gi,
+//     /\bए\s+सी\b/gi,
+//     /\bcooling\b/gi,
+//     /\bकूलिंग\b/gi,
+//     /\bठंडा\b/gi,
+//     /\bठंडी\b/gi,
+//     /\bठंड\b/gi,
+//     /\bthanda\b/gi,
+//     /\bthand\b/gi
+//   ];
+
+//   let hasACMention = false;
+//   for (const pattern of acPatterns) {
+//     if (pattern.test(text)) {
+//       hasACMention = true;
+//       console.log("   ✅ AC pattern matched:", pattern);
+//       break;
+//     }
+//   }
+
+//   // If AC mentioned, give it top priority
+//   if (hasACMention) {
+//     console.log("🎯 AC DETECTED - High Priority Match!");
+//     matches.push("AC System");
+//     confidenceScores["AC System"] = 100;
+//   }
+
+//   // Check against all other complaint categories
+//   for (const [title, data] of Object.entries(complaintMap)) {
+//     if (title === "AC System" && hasACMention) continue;
+
+//     let matchScore = 0;
+//     let matchedKeywords = [];
+//     const priority = data.priority || 1;
+
+//     // Check main keywords
+//     for (const keyword of data.keywords) {
+//       const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+//       if (regex.test(text)) {
+//         matchScore += (2 * priority);
+//         matchedKeywords.push(keyword);
+//       }
+//     }
+
+//     // Check sub-title keywords
+//     if (data.subTitles) {
+//       for (const [subTitle, subKeywords] of Object.entries(data.subTitles)) {
+//         for (const subKeyword of subKeywords) {
+//           const regex = new RegExp(`\\b${subKeyword}\\b`, 'gi');
+//           if (regex.test(text)) {
+//             matchScore += (3 * priority);
+//             matchedKeywords.push(subKeyword);
+//           }
+//         }
+//       }
+//     }
+
+//     if (matchScore > 0 && title !== "AC System") {
+//       matches.push(title);
+//       confidenceScores[title] = matchScore;
+//     }
+//   }
+
+//   if (matches.length === 0) {
+//     console.log("   ❌ No complaint categories matched");
+//     return null;
+//   }
+
+//   // Sort by confidence score
+//   matches.sort((a, b) => confidenceScores[b] - confidenceScores[a]);
+
+//   const topScore = confidenceScores[matches[0]];
+//   const confidence = topScore >= 100 ? 0.99 : 
+//                      topScore >= 50 ? 0.95 : 
+//                      topScore >= 20 ? 0.85 : 
+//                      topScore >= 10 ? 0.75 : 0.6;
+
+//   console.log("🔍 Complaint Detection Results:");
+//   console.log("   Matches:", matches);
+//   console.log("   Scores:", confidenceScores);
+//   console.log("   Top Match:", matches[0], "Score:", topScore, "Confidence:", confidence);
+
+//   return {
+//     primary: matches[0],
+//     secondary: matches.slice(1, 3),
+//     confidence: confidence,
+//     matchedKeywords: matches.map(m => ({
+//       title: m,
+//       score: confidenceScores[m]
+//     }))
+//   };
+// }
 
 /* =======================
    ENHANCED SUB-COMPLAINT DETECTION
