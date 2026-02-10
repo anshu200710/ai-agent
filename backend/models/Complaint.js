@@ -101,6 +101,17 @@ const ComplaintSchema = new mongoose.Schema(
       default: "Unknown",
     },
 
+    // NEW: Machine location with address
+    machineLocationAddress: {
+      type: String,
+      default: "Not Provided",
+    },
+
+    machineLocationPincode: {
+      type: String,
+      default: "",
+    },
+
     // ========== BRANCH & OUTLET ==========
     branch: {
       type: String,
@@ -114,21 +125,23 @@ const ComplaintSchema = new mongoose.Schema(
     },
 
     // ========== TIMING ==========
-    fromTime: {
+    // NEW: Enhanced timing fields
+    serviceDate: {
       type: Date,
+      default: null,
+    },
+
+    fromTime: {
+      type: String,  // Changed to String for "9:00 AM" format
+      default: "",
     },
 
     toTime: {
-      type: Date,
+      type: String,  // Changed to String for "5:00 PM" format
+      default: "",
     },
 
     // ========== COMPLAINT CLASSIFICATION ==========
-    // detailsOfComplaint: {
-    //   type: String,
-    //   alias: "description_raw",
-    //   default: "Not provided by caller",
-    // },
-
     description_raw: {
       type: String,
       default: "Not provided by caller",
@@ -202,5 +215,6 @@ const ComplaintSchema = new mongoose.Schema(
 ComplaintSchema.index({ createdAt: -1 });
 ComplaintSchema.index({ status: 1, branch: 1 });
 ComplaintSchema.index({ complaintTitle: 1, status: 1 });
+ComplaintSchema.index({ machineLocationPincode: 1 });
 
 export default mongoose.model("Complaint", ComplaintSchema);

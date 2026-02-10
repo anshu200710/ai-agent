@@ -1551,6 +1551,191 @@ function generateSubComplaintQuestion(mainComplaint) {
 /* =======================
    UTILITY FUNCTIONS
 ======================= */
+
+
+/* =======================
+   NEW UTILITY FUNCTIONS FOR ENHANCEMENTS
+======================= */
+
+/**
+ * Extract pincode from text (6 digits)
+ */
+function extractPincode(text) {
+  if (!text) return null;
+  
+  // Remove spaces and extract 6 consecutive digits
+  const cleaned = text.replace(/\s+/g, '');
+  const match = cleaned.match(/\b\d{6}\b/);
+  
+  if (match) {
+    console.log("📍 Pincode extracted:", match[0]);
+    return match[0];
+  }
+  
+  // Try word-to-digit conversion for Hindi numbers
+  const words = text.toLowerCase().split(/\s+/);
+  let digits = '';
+  
+  for (const word of words) {
+    if (phoneExtractionPatterns.hindiDigits[word]) {
+      digits += phoneExtractionPatterns.hindiDigits[word];
+    } else if (/^\d+$/.test(word)) {
+      digits += word;
+    }
+  }
+  
+  if (digits.length === 6) {
+    console.log("📍 Pincode extracted from words:", digits);
+    return digits;
+  }
+  
+  return null;
+}
+
+/**
+ * Detect vague/unclear location responses
+ */
+function isVagueLocationResponse(text) {
+  if (!text) return true;
+  
+  const vaguePatterns = [
+    /\bnahi\s+pata\b/gi,
+    /\bpata\s+nahi\b/gi,
+    /\byaad\s+nahi\b/gi,
+    /\bnahi\s+yaad\b/gi,
+    /\bmaloom\s+nahi\b/gi,
+    /\bmere\s+ghar\s+par\b/gi,
+    /\bmere\s+naam\s+se\b/gi,
+    /\bmujhe\s+nahi\s+pta\b/gi,
+    /\bsamajh\s+nahi\b/gi,
+    /\bघर\s+पर\b/gi,
+    /\bनाम\s+से\b/gi,
+    /\bपता\s+नहीं\b/gi,
+    /\bयाद\s+नहीं\b/gi,
+  ];
+  
+  for (const pattern of vaguePatterns) {
+    if (pattern.test(text)) {
+      console.log("⚠️ Vague location response detected:", pattern);
+      return true;
+    }
+  }
+  
+  // Check if response is too short (less than 10 characters)
+  const cleaned = text.trim();
+  if (cleaned.length < 10) {
+    console.log("⚠️ Location response too short");
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Extract service date from text
+ */
+function extractServiceDate(text) {
+  if (!text) return null;
+  
+  const today = new Date();
+  const cleaned = text.toLowerCase().trim();
+  
+  // Check for "aaj" (today)
+  if (/\baaj\b/gi.test(cleaned) || /\btoday\b/gi.test(cleaned)) {
+    console.log("📅 Date: Today");
+    return today;
+  }
+  
+  // Check for "kal" (tomorrow)
+  if (/\bkal\b/gi.test(cleaned) || /\btomorrow\b/gi.test(cleaned)) {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    console.log("📅 Date: Tomorrow");
+    return tomorrow;
+  }
+  
+  // Check for "parso" (day after tomorrow)
+  if (/\bparso\b/gi.test(cleaned) || /\bपरसों\b/gi.test(cleaned)) {
+    const dayAfter = new Date(today);
+    dayAfter.setDate(dayAfter.getDate() + 2);
+    console.log("📅 Date: Day after tomorrow");
+    return dayAfter;
+  }
+  
+  // Try to extract date in DD/MM or DD-MM format
+  const dateMatch = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})/);
+  if (dateMatch) {
+    const day = parseInt(dateMatch[1]);
+    const month = parseInt(dateMatch[2]) - 1; // Month is 0-indexed
+    const year = today.getFullYear();
+    
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      const extractedDate = new Date(year, month, day);
+      console.log("📅 Date extracted:", extractedDate);
+      return extractedDate;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract time from text (e.g., "9 baje", "subah 10", "2 PM")
+ */
+function extractTime(text) {
+  if (!text) return null;
+  
+  const cleaned = text.toLowerCase().trim();
+  
+  // Pattern for "X baje" or "X bajay"
+  const bajeMatch = cleaned.match(/(\d{1,2})\s*(baje|bajay|बजे)/i);
+  if (bajeMatch) {
+    const hour = parseInt(bajeMatch[1]);
+    if (hour >= 1 && hour <= 12) {
+      // Determine AM/PM from context
+      const isPM = /\bsham\b|\bevening\b|\bशाम\b|\bदोपहर\b|\bafternoon\b/gi.test(cleaned);
+      const formattedHour = isPM && hour < 12 ? hour + 12 : hour;
+      const period = isPM ? 'PM' : 'AM';
+      const displayHour = hour;
+      console.log(`⏰ Time extracted: ${displayHour}:00 ${period}`);
+      return `${displayHour}:00 ${period}`;
+    }
+  }
+  
+  // Pattern for "subah/morning"
+  if (/\bsubah\b|\bmorning\b|\bसुबह\b/gi.test(cleaned)) {
+    console.log("⏰ Time: Morning (9:00 AM)");
+    return "9:00 AM";
+  }
+  
+  // Pattern for "dopahar/afternoon"
+  if (/\bdopahar\b|\bafternoon\b|\bदोपहर\b/gi.test(cleaned)) {
+    console.log("⏰ Time: Afternoon (2:00 PM)");
+    return "2:00 PM";
+  }
+  
+  // Pattern for "sham/evening"
+  if (/\bsham\b|\bevening\b|\bशाम\b/gi.test(cleaned)) {
+    console.log("⏰ Time: Evening (5:00 PM)");
+    return "5:00 PM";
+  }
+  
+  // Pattern for direct time like "9 AM", "2 PM", "14:00"
+  const directTimeMatch = cleaned.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|AM|PM)?/);
+  if (directTimeMatch) {
+    const hour = parseInt(directTimeMatch[1]);
+    const minute = directTimeMatch[2] || "00";
+    const period = directTimeMatch[3] || (hour >= 12 ? "PM" : "AM");
+    
+    if (hour >= 1 && hour <= 24) {
+      console.log(`⏰ Time extracted: ${hour}:${minute} ${period.toUpperCase()}`);
+      return `${hour}:${minute} ${period.toUpperCase()}`;
+    }
+  }
+  
+  return null;
+}
+
 function detectBranchAndOutlet(city) {
   if (!city) return { branch: "NA", outlet: "NA", cityCode: "NA" };
   const normalized = city.toLowerCase().trim();
@@ -2471,9 +2656,59 @@ router.post("/process", async (req, res) => {
       }
 
       call.temp.jobLocation = jobLocation;
-      call.step = "ask_complaint";
       call.temp.retries = 0;
-      ask(twiml, "Machine ki complaint batayein. Kya problem hai?", call);
+
+
+      // NEW: Move to machine location address question
+      call.step = "ask_machine_location_address";
+      ask(twiml, "Aapki machine kis location par hai? Pura address pincode ke sath batayein.", call);
+      break;
+    }
+
+    // ========== NEW CASE: ASK MACHINE LOCATION ADDRESS ==========
+    case "ask_machine_location_address": {
+      console.log("📍 Processing machine location address...");
+      
+      // Check for vague responses
+      if (isVagueLocationResponse(rawSpeech)) {
+        call.temp.retries = (call.temp.retries || 0) + 1;
+        
+        if (call.temp.retries >= 2) {
+          // After 2 retries, move forward with "Unknown"
+          call.temp.machineLocationAddress = "Not Provided by Customer";
+          call.temp.machineLocationPincode = "";
+          call.temp.retries = 0;
+          call.step = "ask_complaint";
+          ask(twiml, "Theek hai. Ab machine ki complaint batayein. Kya problem hai?", call);
+          break;
+        }
+        
+        // Re-prompt with clearer instruction
+        ask(
+          twiml, 
+          "Kripya apni machine ke location ka full address bataye. Jaise: gram, tehsil, shahar aur pincode. Agar yaad nahi hai to workshop ka naam ya site ka naam batayein.",
+          call
+        );
+        break;
+      }
+      
+      // Extract pincode
+      const pincode = extractPincode(rawSpeech);
+      
+      // Save the full address (transliterated for database)
+      const addressEnglish = safeAscii(rawSpeech);
+      
+      call.temp.machineLocationAddress = addressEnglish;
+      call.temp.machineLocationPincode = pincode || "";
+      call.temp.retries = 0;
+      
+      console.log("✅ Machine Location saved:");
+      console.log("   Address:", addressEnglish);
+      console.log("   Pincode:", pincode || "Not provided");
+      
+      // Move to complaint question
+      call.step = "ask_complaint";
+      ask(twiml, "Theek hai. Ab machine ki complaint batayein. Kya problem hai?", call);
       break;
     }
 
@@ -2591,12 +2826,16 @@ router.post("/process", async (req, res) => {
       break;
     }
 
+    // ======= MODIFIED: ASK SUB COMPLAINT (now moves to date/time) ==========
     case "ask_sub_complaint": {
       const title = call.temp.complaintTitle;
       
       if (!complaintMap[title] || !complaintMap[title].subTitles) {
         call.temp.complaintSubTitle = "Other";
-        await saveComplaint(twiml, call, CallSid);
+        // NEW: Instead of saving directly, ask for service date
+        call.step = "ask_service_date";
+        call.temp.retries = 0;
+        ask(twiml, "Engineer ko kab bulana hai? Date batayein. Jaise: aaj, kal, parso ya koi specific date.", call);
         break;
       }
 
@@ -2610,7 +2849,10 @@ router.post("/process", async (req, res) => {
         if (call.temp.subRetries >= 2) {
           call.temp.complaintSubTitle = "Other";
           console.log("⚠️  Sub-complaint detection failed after retries, using 'Other'");
-          await saveComplaint(twiml, call, CallSid);
+          // NEW: Move to service date instead of saving
+          call.step = "ask_service_date";
+          call.temp.retries = 0;
+          ask(twiml, "Engineer ko kab bulana hai? Date batayein. Jaise: aaj, kal, parso ya koi specific date.", call);
           break;
         }
 
@@ -2621,6 +2863,106 @@ router.post("/process", async (req, res) => {
 
       call.temp.complaintSubTitle = subResult.subTitle;
       console.log("✅ Sub-complaint detected:", subResult.subTitle);
+      
+      // NEW: Move to service date
+      call.step = "ask_service_date";
+      call.temp.retries = 0;
+      ask(twiml, "Engineer ko kab bulana hai? Date batayein. Jaise: aaj, kal, parso ya koi specific date.", call);
+      break;
+    }
+
+    // ========== NEW CASE: ASK SERVICE DATE ==========
+    case "ask_service_date": {
+      console.log("📅 Processing service date...");
+      
+      const serviceDate = extractServiceDate(rawSpeech);
+      
+      if (!serviceDate) {
+        call.temp.retries = (call.temp.retries || 0) + 1;
+        
+        if (call.temp.retries >= 2) {
+          // Default to tomorrow if unclear
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          call.temp.serviceDate = tomorrow;
+          call.temp.retries = 0;
+          call.step = "ask_service_time_from";
+          ask(twiml, "Kitne baje se engineer aa sakta hai? Jaise: subah 9 baje, dopahar 2 baje.", call);
+          break;
+        }
+        
+        ask(twiml, "Kripya clearly batayein: aaj, kal, parso ya koi specific date. Jaise: 15 tareekh.", call);
+        break;
+      }
+      
+      call.temp.serviceDate = serviceDate;
+      call.temp.retries = 0;
+      call.step = "ask_service_time_from";
+      
+      console.log("✅ Service date saved:", serviceDate);
+      ask(twiml, "Kitne baje se engineer aa sakta hai? Jaise: subah 9 baje, dopahar 2 baje.", call);
+      break;
+    }
+
+    // ========== NEW CASE: ASK SERVICE TIME FROM ==========
+    case "ask_service_time_from": {
+      console.log("⏰ Processing from time...");
+      
+      const fromTime = extractTime(rawSpeech);
+      
+      if (!fromTime) {
+        call.temp.retries = (call.temp.retries || 0) + 1;
+        
+        if (call.temp.retries >= 2) {
+          // Default to 9:00 AM
+          call.temp.serviceTimeFrom = "9:00 AM";
+          call.temp.retries = 0;
+          call.step = "ask_service_time_to";
+          ask(twiml, "Kitne baje tak engineer ruk sakta hai? Jaise: sham 5 baje.", call);
+          break;
+        }
+        
+        ask(twiml, "Kripya clearly time batayein. Jaise: subah 9 baje, dopahar 12 baje, sham 3 baje.", call);
+        break;
+      }
+      
+      call.temp.serviceTimeFrom = fromTime;
+      call.temp.retries = 0;
+      call.step = "ask_service_time_to";
+      
+      console.log("✅ From time saved:", fromTime);
+      ask(twiml, "Kitne baje tak engineer ruk sakta hai? Jaise: sham 5 baje.", call);
+      break;
+    }
+
+    // ========== NEW CASE: ASK SERVICE TIME TO ==========
+    case "ask_service_time_to": {
+      console.log("⏰ Processing to time...");
+      
+      const toTime = extractTime(rawSpeech);
+      
+      if (!toTime) {
+        call.temp.retries = (call.temp.retries || 0) + 1;
+        
+        if (call.temp.retries >= 2) {
+          // Default to 5:00 PM
+          call.temp.serviceTimeTo = "5:00 PM";
+          call.temp.retries = 0;
+          // NOW save the complaint
+          await saveComplaint(twiml, call, CallSid);
+          break;
+        }
+        
+        ask(twiml, "Kripya clearly time batayein. Jaise: sham 5 baje, raat 8 baje.", call);
+        break;
+      }
+      
+      call.temp.serviceTimeTo = toTime;
+      call.temp.retries = 0;
+      
+      console.log("✅ To time saved:", toTime);
+      
+      // All information collected, now save
       await saveComplaint(twiml, call, CallSid);
       break;
     }
