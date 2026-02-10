@@ -12,9 +12,12 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 /* =======================
    EXTERNAL API CONFIG
 ======================= */
-const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+// const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+const EXTERNAL_API_BASE = "http://192.168.0.26/jcbServiceEnginerAPIv7";
 const COMPLAINT_API_URL =
-  "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+  "http://192.168.0.26/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const COMPLAINT_API_URL =
+//   "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = {
   JCBSERVICEAPI: "MakeInJcb",
@@ -929,177 +932,177 @@ const smartFollowUpQuestions = {
    ENHANCED COMPLAINT DETECTION WITH PRIORITY
 ======================= */
 // IMPROVED: More comprehensive complaint detection
-function detectComplaint(text) {
-  console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", text);
+// function detectComplaint(text) {
+//   console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", text);
   
-  if (!text || text.trim().length < 3) {
-    console.log("   ❌ Text too short");
-    return { primary: null, confidence: 0 };
-  }
+//   if (!text || text.trim().length < 3) {
+//     console.log("   ❌ Text too short");
+//     return { primary: null, confidence: 0 };
+//   }
   
-  const textLower = text.toLowerCase();
-  const scores = {};
-  
-  // Calculate scores for each complaint type
-  for (const [complaintType, config] of Object.entries(complaintMap)) {
-    let score = 0;
-    let matchedKeywords = [];
-    
-    // Check keywords
-    for (const keyword of config.keywords) {
-      if (textLower.includes(keyword.toLowerCase())) {
-        score += 2;
-        matchedKeywords.push(keyword);
-      }
-    }
-    
-    // Check patterns (worth more)
-    for (const pattern of config.patterns) {
-      if (pattern.test(text)) {
-        score += 5;
-        matchedKeywords.push(pattern.toString());
-      }
-    }
-    
-    if (score > 0) {
-      scores[complaintType] = { score, matchedKeywords };
-      console.log(`   ✓ ${complaintType}: ${score} (matched: ${matchedKeywords.slice(0, 3).join(', ')})`);
-    }
-  }
-  
-  // Find highest score
-  let bestMatch = null;
-  let highestScore = 0;
-  
-  for (const [type, data] of Object.entries(scores)) {
-    if (data.score > highestScore) {
-      highestScore = data.score;
-      bestMatch = type;
-    }
-  }
-  
-  if (!bestMatch) {
-    console.log("   ❌ No complaint categories matched");
-    return { primary: null, confidence: 0 };
-  }
-  
-  // Calculate confidence (0-1)
-  const confidence = Math.min(highestScore / 10, 1);
-  
-  console.log(`   ✅ DETECTED: ${bestMatch} (confidence: ${(confidence * 100).toFixed(1)}%)`);
-  
-  return {
-    primary: bestMatch,
-    confidence: confidence,
-    matchedKeywords: scores[bestMatch].matchedKeywords
-  };
-}
-// function detectComplaintIntent(text, previousContext = {}) {
-//   if (!text) return null;
-
 //   const textLower = text.toLowerCase();
-//   const matches = [];
-//   const confidenceScores = {};
-
-//   console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", textLower);
-
-//   // Special AC detection - very high priority
-//   const acPatterns = [
-//     /\bac\b/gi,
-//     /\bएसी\b/gi,
-//     /\bऐसी\b/gi,
-//     /\bए\.सी\b/gi,
-//     /\bए\s+सी\b/gi,
-//     /\bcooling\b/gi,
-//     /\bकूलिंग\b/gi,
-//     /\bठंडा\b/gi,
-//     /\bठंडी\b/gi,
-//     /\bठंड\b/gi,
-//     /\bthanda\b/gi,
-//     /\bthand\b/gi
-//   ];
-
-//   let hasACMention = false;
-//   for (const pattern of acPatterns) {
-//     if (pattern.test(text)) {
-//       hasACMention = true;
-//       console.log("   ✅ AC pattern matched:", pattern);
-//       break;
-//     }
-//   }
-
-//   // If AC mentioned, give it top priority
-//   if (hasACMention) {
-//     console.log("🎯 AC DETECTED - High Priority Match!");
-//     matches.push("AC System");
-//     confidenceScores["AC System"] = 100;
-//   }
-
-//   // Check against all other complaint categories
-//   for (const [title, data] of Object.entries(complaintMap)) {
-//     if (title === "AC System" && hasACMention) continue;
-
-//     let matchScore = 0;
+//   const scores = {};
+  
+//   // Calculate scores for each complaint type
+//   for (const [complaintType, config] of Object.entries(complaintMap)) {
+//     let score = 0;
 //     let matchedKeywords = [];
-//     const priority = data.priority || 1;
-
-//     // Check main keywords
-//     for (const keyword of data.keywords) {
-//       const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-//       if (regex.test(text)) {
-//         matchScore += (2 * priority);
+    
+//     // Check keywords
+//     for (const keyword of config.keywords) {
+//       if (textLower.includes(keyword.toLowerCase())) {
+//         score += 2;
 //         matchedKeywords.push(keyword);
 //       }
 //     }
-
-//     // Check sub-title keywords
-//     if (data.subTitles) {
-//       for (const [subTitle, subKeywords] of Object.entries(data.subTitles)) {
-//         for (const subKeyword of subKeywords) {
-//           const regex = new RegExp(`\\b${subKeyword}\\b`, 'gi');
-//           if (regex.test(text)) {
-//             matchScore += (3 * priority);
-//             matchedKeywords.push(subKeyword);
-//           }
-//         }
+    
+//     // Check patterns (worth more)
+//     for (const pattern of config.patterns) {
+//       if (pattern.test(text)) {
+//         score += 5;
+//         matchedKeywords.push(pattern.toString());
 //       }
 //     }
-
-//     if (matchScore > 0 && title !== "AC System") {
-//       matches.push(title);
-//       confidenceScores[title] = matchScore;
+    
+//     if (score > 0) {
+//       scores[complaintType] = { score, matchedKeywords };
+//       console.log(`   ✓ ${complaintType}: ${score} (matched: ${matchedKeywords.slice(0, 3).join(', ')})`);
 //     }
 //   }
-
-//   if (matches.length === 0) {
-//     console.log("   ❌ No complaint categories matched");
-//     return null;
+  
+//   // Find highest score
+//   let bestMatch = null;
+//   let highestScore = 0;
+  
+//   for (const [type, data] of Object.entries(scores)) {
+//     if (data.score > highestScore) {
+//       highestScore = data.score;
+//       bestMatch = type;
+//     }
 //   }
-
-//   // Sort by confidence score
-//   matches.sort((a, b) => confidenceScores[b] - confidenceScores[a]);
-
-//   const topScore = confidenceScores[matches[0]];
-//   const confidence = topScore >= 100 ? 0.99 : 
-//                      topScore >= 50 ? 0.95 : 
-//                      topScore >= 20 ? 0.85 : 
-//                      topScore >= 10 ? 0.75 : 0.6;
-
-//   console.log("🔍 Complaint Detection Results:");
-//   console.log("   Matches:", matches);
-//   console.log("   Scores:", confidenceScores);
-//   console.log("   Top Match:", matches[0], "Score:", topScore, "Confidence:", confidence);
-
+  
+//   if (!bestMatch) {
+//     console.log("   ❌ No complaint categories matched");
+//     return { primary: null, confidence: 0 };
+//   }
+  
+//   // Calculate confidence (0-1)
+//   const confidence = Math.min(highestScore / 10, 1);
+  
+//   console.log(`   ✅ DETECTED: ${bestMatch} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+  
 //   return {
-//     primary: matches[0],
-//     secondary: matches.slice(1, 3),
+//     primary: bestMatch,
 //     confidence: confidence,
-//     matchedKeywords: matches.map(m => ({
-//       title: m,
-//       score: confidenceScores[m]
-//     }))
+//     matchedKeywords: scores[bestMatch].matchedKeywords
 //   };
 // }
+function detectComplaintIntent(text, previousContext = {}) {
+  if (!text) return null;
+
+  const textLower = text.toLowerCase();
+  const matches = [];
+  const confidenceScores = {};
+
+  console.log("🔍 ANALYZING TEXT FOR COMPLAINT:", textLower);
+
+  // Special AC detection - very high priority
+  const acPatterns = [
+    /\bac\b/gi,
+    /\bएसी\b/gi,
+    /\bऐसी\b/gi,
+    /\bए\.सी\b/gi,
+    /\bए\s+सी\b/gi,
+    /\bcooling\b/gi,
+    /\bकूलिंग\b/gi,
+    /\bठंडा\b/gi,
+    /\bठंडी\b/gi,
+    /\bठंड\b/gi,
+    /\bthanda\b/gi,
+    /\bthand\b/gi
+  ];
+
+  let hasACMention = false;
+  for (const pattern of acPatterns) {
+    if (pattern.test(text)) {
+      hasACMention = true;
+      console.log("   ✅ AC pattern matched:", pattern);
+      break;
+    }
+  }
+
+  // If AC mentioned, give it top priority
+  if (hasACMention) {
+    console.log("🎯 AC DETECTED - High Priority Match!");
+    matches.push("AC System");
+    confidenceScores["AC System"] = 100;
+  }
+
+  // Check against all other complaint categories
+  for (const [title, data] of Object.entries(complaintMap)) {
+    if (title === "AC System" && hasACMention) continue;
+
+    let matchScore = 0;
+    let matchedKeywords = [];
+    const priority = data.priority || 1;
+
+    // Check main keywords
+    for (const keyword of data.keywords) {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      if (regex.test(text)) {
+        matchScore += (2 * priority);
+        matchedKeywords.push(keyword);
+      }
+    }
+
+    // Check sub-title keywords
+    if (data.subTitles) {
+      for (const [subTitle, subKeywords] of Object.entries(data.subTitles)) {
+        for (const subKeyword of subKeywords) {
+          const regex = new RegExp(`\\b${subKeyword}\\b`, 'gi');
+          if (regex.test(text)) {
+            matchScore += (3 * priority);
+            matchedKeywords.push(subKeyword);
+          }
+        }
+      }
+    }
+
+    if (matchScore > 0 && title !== "AC System") {
+      matches.push(title);
+      confidenceScores[title] = matchScore;
+    }
+  }
+
+  if (matches.length === 0) {
+    console.log("   ❌ No complaint categories matched");
+    return null;
+  }
+
+  // Sort by confidence score
+  matches.sort((a, b) => confidenceScores[b] - confidenceScores[a]);
+
+  const topScore = confidenceScores[matches[0]];
+  const confidence = topScore >= 100 ? 0.99 : 
+                     topScore >= 50 ? 0.95 : 
+                     topScore >= 20 ? 0.85 : 
+                     topScore >= 10 ? 0.75 : 0.6;
+
+  console.log("🔍 Complaint Detection Results:");
+  console.log("   Matches:", matches);
+  console.log("   Scores:", confidenceScores);
+  console.log("   Top Match:", matches[0], "Score:", topScore, "Confidence:", confidence);
+
+  return {
+    primary: matches[0],
+    secondary: matches.slice(1, 3),
+    confidence: confidence,
+    matchedKeywords: matches.map(m => ({
+      title: m,
+      score: confidenceScores[m]
+    }))
+  };
+}
 
 /* =======================
    ENHANCED SUB-COMPLAINT DETECTION
@@ -2572,7 +2575,8 @@ async function saveComplaint(twiml, call, CallSid) {
     caller_no: callerPhoneFinal,
     
     // 5. Contact Person Number
-    contact_person: callerNameFinal,
+    contact_person: callerPhoneFinal,
+    // contact_person: callerNameFinal,
     contact_person_number: callerPhoneFinal,
     
     // 6. Machine Model *
