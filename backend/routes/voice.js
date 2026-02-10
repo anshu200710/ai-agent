@@ -5,6 +5,14 @@ import axios from "axios";
 import CallSession from "../models/CallSession.js";
 import Customer from "../models/Customer.js";
 import Complaint from "../models/Complaint.js";
+import {
+  extractPhoneNumberV2,
+  extractChassisNumberV2,
+  extractNameV2,
+  extractPincodeV2,
+  extractLocationAddressV2,
+  extractTimeV2
+} from '../utils/improved_extraction.js';
 
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -218,6 +226,8 @@ const phoneExtractionPatterns = {
     'mera', 'hai', 'is', 'the',
   ],
 };
+
+
 
 function extractPhoneNumber(text) {
   if (!text) return null;
@@ -2906,10 +2916,9 @@ router.post("/process", async (req, res) => {
   switch (call.step) {
     case "ask_identifier": {
       // Enhanced phone extraction
-      const phone = extractPhoneNumber(rawSpeech);
-      
+      const phone = extractPhoneNumberV2(rawSpeech);      
       // Enhanced chassis extraction
-      let chassis = rawSpeech.replace(/\s+/g, "").toUpperCase();
+      const chassis = extractChassisNumberV2(rawSpeech);
       if (/[\u0900-\u097F]/.test(chassis)) {
         chassis = transliteratedSpeech.replace(/\s+/g, "").toUpperCase();
       }
@@ -3022,7 +3031,7 @@ router.post("/process", async (req, res) => {
 
     case "ask_complaint_given_by_name": {
       // Use advanced name extraction
-      const extractedName = extractName(rawSpeech);
+        const extractedName = extractNameV2(rawSpeech);
       
       console.log("👤 Name extraction:");
       console.log("   Raw:", rawSpeech);
@@ -3052,7 +3061,7 @@ router.post("/process", async (req, res) => {
 
     case "ask_complaint_given_by_phone": {
       // Use advanced phone extraction
-      const phone = extractPhoneNumber(rawSpeech);
+        const phone = extractPhoneNumberV2(rawSpeech);
 
       console.log("📞 Phone extraction:");
       console.log("   Raw:", rawSpeech);
@@ -3222,8 +3231,7 @@ router.post("/process", async (req, res) => {
       }
       
       // Extract location data
-      const locationData = extractLocationAddress(rawSpeech);
-      
+  const locationData = extractLocationAddressV2(rawSpeech);      
       call.temp.machineLocationAddress = locationData.address;
       call.temp.machineLocationPincode = locationData.pincode;
       call.temp.retries = 0;
@@ -3441,8 +3449,7 @@ router.post("/process", async (req, res) => {
     case "ask_service_time_from": {
       console.log("⏰ Processing from time...");
       
-      const fromTime = extractTime(rawSpeech);
-      
+  const fromTime = extractTimeV2(rawSpeech);      
       if (!fromTime) {
         call.temp.retries = (call.temp.retries || 0) + 1;
         
