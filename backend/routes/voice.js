@@ -2358,7 +2358,7 @@ function safeAscii(text) {
 function extractLocationAddress(text) {
   if (!text) return { address: "Unknown", pincode: "" };
   
-  const pincode = extractPincode(text);
+  const pincode = extractPincodeV2(text);
   
   // Remove common filler words but preserve location names
   const fillerWords = ['meri', 'मेरी', 'machine', 'मशीन', 'hai', 'है', 'par', 'पर'];
