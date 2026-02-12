@@ -8,7 +8,8 @@ import express from 'express';
 import bodyParser from 'body-parser';
 
 import connectDB from './config/db.js';
-import voiceRoutes from './routes/voice.js';
+import voiceRoutes from './routes/voice_NUMERIC_IVR.js';
+// import voiceRoutes from './routes/voice.js';
 import outboundRoutes from './routes/outbound.js';
 import customerRoutes from "./routes/customer.js";
 
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.use('/voice', voiceRoutes);
+// app.use('/voice', voiceRoutes);
 app.use('/outbound', outboundRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/audio", express.static("public/audio"));
