@@ -265,21 +265,23 @@ export function extractTimeV3(text) {
   let isNight = false;
 
   // Hindi morning indicators (4 AM - 11 AM)
-  if (/\b(सुबह|subah|morning|सुबह|तड़का|तड़के|रात|रात को|आधी रात)\b/i.test(lowerText)) {
+  if (/\b(सुबह|subah|morning|तड़का|तड़के|रात|रात को|आधी रात)\b/i.test(lowerText)) {
     isMorning = true;
     isAM = true;
   }
 
-  // Hindi afternoon indicators (12 PM - 5 PM)
-  if (/\b(दोपहर|dopahar|afternoon|दोपहर|दुपहरी|दुपहर)\b/i.test(lowerText)) {
+  // Hindi afternoon indicators (12 PM - 5 PM) - including "duphare", "dopahar", "दुपहर"
+  if (/\b(दोपहर|दुपहरी|दुपहर|दुपहार|dopahar|duphare|dophar|afternoon)\b/i.test(lowerText)) {
     isAfternoon = true;
     isPM = true;
+    console.log(`   ✅ Afternoon detected (PM)`);
   }
 
-  // Hindi evening indicators (5 PM - 8 PM)
-  if (/\b(शाम|sham|evening|संध्या|सायंकाल|शाम को)\b/i.test(lowerText)) {
+  // Hindi evening indicators (5 PM - 8 PM) - including "shaam", "शाम"
+  if (/\b(शाम|sham|shaam|evening|संध्या|सायंकाल|शाम को)\b/i.test(lowerText)) {
     isEvening = true;
     isPM = true;
+    console.log(`   ✅ Evening detected (PM)`);
   }
 
   // Hindi night indicators (8 PM - 4 AM)
@@ -303,9 +305,9 @@ export function extractTimeV3(text) {
     console.log(`   Found time format HH:MM: ${hour}:${minute}`);
   }
 
-  // Pattern 2: Single number (hour only)
+  // Pattern 2: Single number (hour only) - like "2 baje" or "2 baje"
   if (!timeMatch) {
-    const singleNumberMatch = lowerText.match(/\b(\d{1,2})\s*(बजे|baje|o'clock|oclock|बज|बज़े|am|pm|a\.m|p\.m)\b/i);
+    const singleNumberMatch = lowerText.match(/\b(\d{1,2})\s*(बजे|baje|baj|o'clock|oclock|बज|बज़े|am|pm|a\.m|p\.m)\b/i);
     if (singleNumberMatch) {
       hour = parseInt(singleNumberMatch[1]);
       console.log(`   Found single hour: ${hour}`);
@@ -342,18 +344,11 @@ export function extractTimeV3(text) {
   // Step 3: Apply AM/PM logic
   let finalHour = hour;
 
-  // If context suggests PM and hour is 1-9 (single digit morning hour), assume PM
-  if (isPM && hour >= 1 && hour <= 9) {
-    // If it's evening (5-8 PM range) and single digit
-    if (isEvening && hour >= 5) {
-      finalHour = hour; // 5-8 is already correct
-    } else if (isEvening || isNight) {
-      // Afternoon to night: add 12 if needed
-      finalHour = hour < 12 ? hour + 12 : hour;
-    } else if (isAfternoon) {
-      // Afternoon: add 12 if 1-12
-      finalHour = hour < 12 ? hour + 12 : hour;
-    }
+  // If context suggests PM (afternoon, evening, night)
+  if ((isAfternoon || isEvening || isNight) && hour >= 1 && hour <= 12) {
+    // Add 12 hours to convert to 24-hour format (except 12 PM which stays 12)
+    finalHour = hour === 12 ? 12 : hour + 12;
+    console.log(`   🌅 PM conversion: ${hour} → ${finalHour}`);
   }
 
   // If morning context
@@ -582,3 +577,116 @@ export function isValidChassis(chassis) {
   // Should be 6-12 digit sequence
   return /^\d{6,12}$/.test(chassis.toString());
 }
+
+
+
+// ==================== ENHANCED HINDI TO ENGLISH WITH FALLBACK ====================
+
+const hindiToEnglishComprehensive = {
+  // Names (Common Indian names)
+  'अंशु': 'Anshu',
+  'राहुल': 'Rahul',
+  'प्रिया': 'Priya',
+  'विजय': 'Vijay',
+  'संजय': 'Sanjay',
+  'अमित': 'Amit',
+  'दिपक': 'Dipak',
+  'राज': 'Raj',
+  'महेश': 'Mahesh',
+  'राकेश': 'Rakesh',
+  'अरुण': 'Arun',
+  'पवन': 'Pawan',
+  'सुनील': 'Sunil',
+  'दिनेश': 'Dinesh',
+  'हनुमान': 'Hanuman',
+  'यादव': 'Yadav',
+  
+  // Places
+  'अजमेर': 'Ajmer',
+  'अलवर': 'Alwar',
+  'जयपुर': 'Jaipur',
+  'कोटा': 'Kota',
+  'उदयपुर': 'Udaipur',
+  'भरतपुर': 'Bharatpur',
+  'भिवाड़ी': 'Bhiwadi',
+  'भीलवाड़ा': 'Bhilwara',
+  
+  // Locations
+  'बस अड्डा': 'Bus Stand',
+  'रोड': 'Road',
+  'नियर': 'Near',
+  'बाजार': 'Market',
+  'गली': 'Lane',
+  'मोहल्ला': 'Locality',
+  
+  // Status & Complaint Keywords
+  'खराब': 'Faulty',
+  'टूटा': 'Broken',
+  'काम नहीं कर रहा': 'Not Working',
+  'धुआ': 'Smoke',
+  'शोर': 'Noise',
+  'लीक': 'Leak',
+};
+
+/**
+ * Enhanced Hindi to English translation with fallback
+ * Uses dictionary + Devanagari removal + transliteration fallback
+ */
+async function translateHindiToEnglishEnhanced(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  const hindiRegex = /[\u0900-\u097F]/;
+  if (!hindiRegex.test(text)) {
+    return text; // No Hindi detected
+  }
+
+  console.log(`🔤 [TRANSLATION START] Input: "${text.substring(0, 60)}..."`);
+  
+  let result = text;
+  
+  // STEP 1: Apply comprehensive dictionary (exact matches)
+  for (const [hindi, english] of Object.entries(hindiToEnglishComprehensive)) {
+    const regex = new RegExp(`\\b${hindi}\\b`, 'gi');
+    result = result.replace(regex, english);
+  }
+  
+  // STEP 2: Romanize remaining Devanagari characters
+  result = romanizeDevanagari(result);
+  
+  // STEP 3: Clean up multiple spaces
+  result = result.replace(/\s+/g, ' ').trim();
+  
+  console.log(`✅ [TRANSLATION END] Output: "${result}"`);
+  return result || 'Not Provided';
+}
+
+/**
+ * Devanagari to Roman transliteration (phonetic conversion)
+ * E.g., "अंशु" → "anshu"
+ */
+function romanizeDevanagari(text) {
+  const devanagariMap = {
+    // Vowels
+    'अ': 'A', 'आ': 'Aa', 'इ': 'I', 'ई': 'Ee', 'उ': 'U', 'ऊ': 'Oo',
+    'ऋ': 'Ri', 'ए': 'E', 'ऐ': 'Ai', 'ओ': 'O', 'औ': 'Au',
+    
+    // Consonants
+    'क': 'K', 'ख': 'Kh', 'ग': 'G', 'घ': 'Gh', 'च': 'Ch',
+    'छ': 'Chh', 'ज': 'J', 'झ': 'Jh', 'ट': 'T', 'ठ': 'Th',
+    'ड': 'D', 'ढ': 'Dh', 'त': 'T', 'थ': 'Th', 'द': 'D',
+    'ध': 'Dh', 'न': 'N', 'प': 'P', 'फ': 'Ph', 'ब': 'B',
+    'भ': 'Bh', 'म': 'M', 'य': 'Y', 'र': 'R', 'ल': 'L',
+    'व': 'V', 'श': 'Sh', 'ष': 'Sh', 'स': 'S', 'ह': 'H',
+    
+    // Special
+    'ण': 'N', 'ं': 'N', 'ः': 'H', 'ॅ': '',
+  };
+  
+  let romanized = '';
+  for (let char of text) {
+    romanized += devanagariMap[char] || char;
+  }
+  return romanized;
+}
+
+export { translateHindiToEnglishEnhanced, romanizeDevanagari };
