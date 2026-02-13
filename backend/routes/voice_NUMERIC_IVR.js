@@ -807,6 +807,7 @@ function extractServiceDate(text) {
   const cleaned = text.toLowerCase();
   const today = new Date();
 
+  // Handle relative dates first
   if (/\baaj\b|\btoday\b|\bआज\b/i.test(cleaned)) {
     return today;
   }
@@ -821,6 +822,57 @@ function extractServiceDate(text) {
     const dayAfter = new Date(today);
     dayAfter.setDate(dayAfter.getDate() + 2);
     return dayAfter;
+  }
+
+  // Try to extract actual date (DD/MM or DD Month format)
+  const months = {
+    'january': 1, 'jan': 1, 'जनवरी': 1,
+    'february': 2, 'feb': 2, 'फरवरी': 2,
+    'march': 3, 'mar': 3, 'मार्च': 3,
+    'april': 4, 'apr': 4, 'अप्रैल': 4,
+    'may': 5, 'मई': 5,
+    'june': 6, 'jun': 6, 'जून': 6,
+    'july': 7, 'jul': 7, 'जुलाई': 7,
+    'august': 8, 'aug': 8, 'अगस्त': 8,
+    'september': 9, 'sep': 9, 'सितंबर': 9,
+    'october': 10, 'oct': 10, 'अक्टूबर': 10,
+    'november': 11, 'nov': 11, 'नवंबर': 11,
+    'december': 12, 'dec': 12, 'दिसंबर': 12
+  };
+
+  // Try DD/MM format - "13/2", "13-2"
+  const dateMatch1 = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})/);
+  if (dateMatch1) {
+    const day = parseInt(dateMatch1[1]);
+    const month = parseInt(dateMatch1[2]);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      const date = new Date(today.getFullYear(), month - 1, day);
+      // Make sure date is not in the past
+      if (date >= today) {
+        return date;
+      }
+      // If date is in the past, assume next year
+      date.setFullYear(today.getFullYear() + 1);
+      return date;
+    }
+  }
+
+  // Try "DD Month" format - "13 february", "13 फरवरी"
+  const dateMatch2 = cleaned.match(/(\d{1,2})\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec|जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर)/i);
+  if (dateMatch2) {
+    const day = parseInt(dateMatch2[1]);
+    const monthName = dateMatch2[2].toLowerCase();
+    const month = months[monthName];
+    if (day >= 1 && day <= 31 && month) {
+      const date = new Date(today.getFullYear(), month - 1, day);
+      // Make sure date is not in the past
+      if (date >= today) {
+        return date;
+      }
+      // If date is in the past, assume next year
+      date.setFullYear(today.getFullYear() + 1);
+      return date;
+    }
   }
 
   return null;
@@ -1355,7 +1407,8 @@ router.post("/", async (req, res) => {
 
   gather.say(
     { voice: "Polly.Aditi", language: "hi-IN" },
-    "Namaste! Rajesh JCB Motors mein aapka swagat hai. Complaint register karne ke liye ek dabayein. Agar aap kisi agent se baat karna chahte hain to do dabayien."
+    "नमस्ते! राजेश JCB मोटर्स में आपका स्वागत है। Complaint register करने के लिए 1 दबाएं। अगर आप किसी agent से बात करना चाहते हैं तो 2 दबाएं।"
+    // "Namaste! Rajesh JCB Motors mein aapka swagat hai. Complaint register karne ke liye ek dabayein. Agar aap kisi agent se baat karna chahte hain to do dabayien."
   );
 
   res.type("text/xml").send(twiml.toString());
@@ -1401,11 +1454,11 @@ router.post("/process", async (req, res) => {
       if (Digits === "1") {
         callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "Machine number type karke hash (#) key dabayein.";
+        callData.lastQuestion = "Machine number type करके hash (#) key दबाएं।";
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 20,
+          timeout: 30,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
@@ -1436,12 +1489,12 @@ router.post("/process", async (req, res) => {
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 20,
+          timeout: 30,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
         });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion || "Machine number type karke hash (#) key dabayein.");
+        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion || "Machine number type करके hash (#) key दबाएं।");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -1480,11 +1533,11 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type karke hash (#) key dabayein.`;
+        callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type करके hash (#) key दबाएं।`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 20,
+          timeout: 30,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
@@ -1580,11 +1633,11 @@ router.post("/process", async (req, res) => {
         }
 
         if (!identifier) {
-          callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type karke hash (#) key dabayein.`;
+          callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type करके hash (#) key दबाएं।`;
           const gather = twiml.gather({
             input: "dtmf",
             finishOnKey: "#",
-            timeout: 20,
+            timeout: 30,
             actionOnEmptyResult: true,
             action: "/voice/process",
             method: "POST",
@@ -1628,7 +1681,7 @@ router.post("/process", async (req, res) => {
       callData.step = "confirm_customer_details";
       callData.retries = 0;
       
-      const confirmQuestion = `Aapka city hai ${customerData.city} aur naam hai ${customerData.name}. Kya yeh theek hai? Haan to 1 dabayein, nahi to 2 dabayein.`;
+      const confirmQuestion = `आपका city है  ${customerData.city} और नाम है ${customerData.name}.क्या ये ठीक है? हाँ तो 1 दबाएं, नहीं तो 2 दबाएं।`;
       callData.lastQuestion = confirmQuestion;
       
       console.log(`🔊 Asking for confirmation: "${confirmQuestion}"`);
@@ -1651,7 +1704,7 @@ router.post("/process", async (req, res) => {
         console.log("✅ Customer confirmed details - Moving to next step");
         callData.step = "ask_caller_name";
         callData.retries = 0;
-        callData.lastQuestion = "Bahut accha! Ab mujhe batayein, Aapka Pura naam Kya hain?";
+        callData.lastQuestion = "बहुत अच्छा! अब मुझे बताइए, आपका पूरा नाम क्या है?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1660,11 +1713,11 @@ router.post("/process", async (req, res) => {
         console.log("❌ Customer rejected details - Restarting identifier collection");
         callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "Theek hai. Dobara: Machine number type karke hash (#) key dabayein.";
+        callData.lastQuestion = "Theek hai. Dobara: Machine number type करके hash (#) key दबाएं।";
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 20,
+          timeout: 30,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
@@ -1800,7 +1853,7 @@ router.post("/process", async (req, res) => {
         }
 
         console.log(`⚠️ Name validation failed - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "Apna pura naam saaf saaf boliye, thoda slow boliye na.";
+        callData.lastQuestion = "Apna pura naam saaf saaf boliye, thoda slow boliye ";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1809,7 +1862,7 @@ router.post("/process", async (req, res) => {
       callData.callerName = name;
       callData.retries = 0;
       callData.step = "ask_caller_phone";
-      callData.lastQuestion = "Shukriya! Ab apna 10 digit mobile number boliye ya type karein, phir # key dabayein. Jaise: nau aath aath do tiin char...";
+      callData.lastQuestion = " शुक्रिया! अब अपना 10-digit mobile number बोलिए या type करें, फिर # key दबाएं। जैसे: नौ आठ आठ दो तीन चार...";
       const gather = twiml.gather({
         input: "speech dtmf",
         language: "hi-IN",
@@ -1842,7 +1895,7 @@ router.post("/process", async (req, res) => {
           action: "/voice/process",
           method: "POST",
         });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Aapka 10 digit mobile number kahiye ya type karein, phir # key dabayein.");
+        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, "अपना 10-digit mobile number बोलिए या type करें, फिर # key दबाएं। जैसे: नौ आठ आठ दो तीन चार...");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -2438,7 +2491,7 @@ router.post("/process", async (req, res) => {
         console.log(`✓ Complaint confirmed`);
         callData.step = "ask_service_date";
         callData.retries = 0;
-        callData.lastQuestion = "Bahut accha. Ab batayein, engineer ko kab bulana hai? Aaj, kal, ya parso?";
+        callData.lastQuestion = "Shukriya! Ab batayein, engineer ke liye kaun si tarikh theek hai? Date boliye - jaise: 15 february, 15/2, aaj, kal, ya parso.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2481,7 +2534,7 @@ router.post("/process", async (req, res) => {
       // Handle STAR (*) key to repeat last question
       if (Digits === "*") {
         console.log("🔄 User pressed * - Repeating service date question");
-        callData.lastQuestion = "Engineer kab aaye? Aaj, kal, parso? Boliye na.";
+        callData.lastQuestion = "Engineer ke liye kaun si tarikh theek hai? date batayein jaise: 15 february ya 15/2.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2498,13 +2551,13 @@ router.post("/process", async (req, res) => {
           callData.serviceDate = tomorrow;
           callData.step = "ask_service_time_from";
           callData.retries = 0;
-          callData.lastQuestion = "Kitne baje se engineer aa sakta hai?";
+          callData.lastQuestion = "Theek hai, kal ke liye fix kar diya. Ab batayein, engineer kitne baje aaye?";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = "Aaj, kal, parso, ya koi aur tarikh batayein.";
+        callData.lastQuestion = "Tarikh samajh nahi paye. Kripya boliye: 13 february, 15/2";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2539,7 +2592,7 @@ router.post("/process", async (req, res) => {
           callData.fromTime = "9:00 AM";
           callData.step = "ask_service_time_to";
           callData.retries = 0;
-          callData.lastQuestion = "Kitne baje tak engineer ruk sakta hai?";
+          callData.lastQuestion = "किस बजे तक engineer काम कर सकता है? End time बोलिए। Jaise: 5 baje, 7 baje.";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());

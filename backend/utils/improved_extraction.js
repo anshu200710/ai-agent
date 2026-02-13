@@ -344,17 +344,22 @@ export function extractTimeV3(text) {
   // Step 3: Apply AM/PM logic
   let finalHour = hour;
 
-  // If context suggests PM (afternoon, evening, night)
-  if ((isAfternoon || isEvening || isNight) && hour >= 1 && hour <= 12) {
-    // Add 12 hours to convert to 24-hour format (except 12 PM which stays 12)
-    finalHour = hour === 12 ? 12 : hour + 12;
-    console.log(`   🌅 PM conversion: ${hour} → ${finalHour}`);
-  }
-
-  // If morning context
-  if (isAM && hour >= 1 && hour <= 12) {
+  // If morning context explicitly stated
+  if (isMorning && hour >= 1 && hour <= 12) {
     finalHour = hour;
     if (hour === 12) finalHour = 0; // 12 AM = 00:00
+    console.log(`   🌅 Morning (AM) context: ${hour} → ${finalHour}`);
+  } 
+  // If context suggests PM (afternoon, evening, night)
+  else if ((isAfternoon || isEvening || isNight) && hour >= 1 && hour <= 12) {
+    // Add 12 hours to convert to 24-hour format (except 12 PM which stays 12)
+    finalHour = hour === 12 ? 12 : hour + 12;
+    console.log(`   🌅 PM context detected: ${hour} → ${finalHour}`);
+  }
+  // DEFAULT: No explicit time context → Always default to PM for business hours
+  else if (hour >= 1 && hour <= 12) {
+    finalHour = hour === 12 ? 12 : hour + 12; // Default to PM
+    console.log(`   ⚠️ No time context - defaulting to PM: ${hour} → ${finalHour}`);
   }
 
   // Convert to 12-hour format with AM/PM
