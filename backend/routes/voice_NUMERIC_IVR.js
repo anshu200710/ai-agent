@@ -22,8 +22,8 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://192.168.0.134/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL = "http://192.168.0.134/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://192.168.0.22/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://192.168.0.22/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -868,8 +868,9 @@ async function submitComplaintToExternal(complaintData) {
     console.log("\n" + "=".repeat(120));
     console.log("🌐 SUBMITTING COMPLAINT TO EXTERNAL API");
     console.log("=".repeat(120));
+    console.log("📤 REQUEST DATA:");
     console.log(JSON.stringify(complaintData, null, 2));
-    console.log("=".repeat(120) + "\n");
+    console.log("=".repeat(120));
 
     const response = await axios.post(COMPLAINT_API_URL, complaintData, {
       timeout: API_TIMEOUT,
@@ -879,6 +880,13 @@ async function submitComplaintToExternal(complaintData) {
       },
       validateStatus: (status) => status < 500,
     });
+
+    console.log("\n" + "=".repeat(120));
+    console.log("📥 API RESPONSE:");
+    console.log("=".repeat(120));
+    console.log(`Status Code: ${response.status}`);
+    console.log(`Response Data: ${JSON.stringify(response.data, null, 2)}`);
+    console.log("=".repeat(120) + "\n");
 
     if (
       response.status !== 200 ||
@@ -906,6 +914,7 @@ async function submitComplaintToExternal(complaintData) {
 
   } catch (error) {
     console.error("❌ Submit Error:", error.message);
+    console.error("Error Details:", error.response?.data || error);
     return {
       success: false,
       error: error.message
@@ -960,11 +969,15 @@ async function saveComplaint(twiml, callData) {
       job_open_lng: "0.000000",
     };
 
+    // Submit to external API
     const externalResult = await submitComplaintToExternal(complaintApiData);
     let sapId = null;
 
     if (externalResult.success) {
       sapId = externalResult.sapId;
+      console.log("✅ Data successfully posted to external API");
+    } else {
+      console.log("⚠️ External API submission failed:", externalResult.error);
     }
 
     const complaintDbData = {
@@ -993,13 +1006,33 @@ async function saveComplaint(twiml, callData) {
       toTime: callData.toTime || "",
     };
 
+    // Save to MongoDB
+    console.log("\n" + "=".repeat(120));
+    console.log("💾 SAVING COMPLAINT TO DATABASE");
+    console.log("=".repeat(120));
+    console.log("📝 DATABASE PAYLOAD:");
+    console.log(JSON.stringify(complaintDbData, null, 2));
+    console.log("=".repeat(120));
+
     const savedComplaint = await Complaint.create(complaintDbData);
-    console.log(`✅ Complaint saved to DB with ID: ${savedComplaint._id}`);
+    
+    console.log("\n" + "=".repeat(120));
+    console.log("✅ COMPLAINT SUCCESSFULLY SAVED TO DATABASE");
+    console.log("=".repeat(120));
+    console.log(`Database ID: ${savedComplaint._id}`);
+    console.log(`SAP ID: ${sapId}`);
+    console.log(`Machine: ${callData.chassis}`);
+    console.log(`Customer: ${customerData.name}`);
+    console.log(`Type: ${callData.machineType}`);
+    console.log(`Status: ${callData.machineStatus}`);
+    console.log("=".repeat(120) + "\n");
 
     return { success: true, sapId };
 
   } catch (error) {
-    console.error("❌ Database error:", error.message);
+    console.error("\n" + "❌".repeat(60));
+    console.error("DATABASE ERROR:", error.message);
+    console.error("❌".repeat(60) + "\n");
     return { success: false, error: error.message };
   }
 }
@@ -1071,10 +1104,18 @@ router.post("/process", async (req, res) => {
       }
 
       if (Digits === "1") {
-        callData.step = "check_registration";
+        callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "Theek hai. Pehle mujhe batayein, kya aap hamari phone number pe pehle se registered hain? Agar haan to press 1, agar nahi to press 2.";
-        askDTMF(twiml, callData.lastQuestion, 1);
+        callData.lastQuestion = "Machine number type karke hash (#) key dabayein.";
+        const gather = twiml.gather({
+          input: "dtmf",
+          finishOnKey: "#",
+          timeout: 20,
+          actionOnEmptyResult: true,
+          action: "/voice/process",
+          method: "POST",
+        });
+        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -1092,62 +1133,49 @@ router.post("/process", async (req, res) => {
     console.log(`🧹 CLEANED: "${rawSpeech}"`);
     console.log("=".repeat(120));
 
-    // ===== CHECK REGISTRATION (NEW NUMERIC CHECK) =====
-    if (callData.step === "check_registration") {
-      if (Digits === "1") {
-        // YES - Customer is registered
-        console.log("✅ Customer says REGISTERED - Continue to chassis");
-        callData.step = "ask_chassis";
-        callData.retries = 0;
-        callData.lastQuestion = "Bahut accha! Bilkul theek hai. Ab mujhe aapni machine ka chassis number batayein. Jaise ki, teen teen zero paanch char char saat.";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else if (Digits === "2") {
-        // NO - Customer is NOT registered
-        console.log("❌ Customer says NOT REGISTERED");
-        callData.step = "ask_identifier";
-        callData.retries = 0;
-        callData.lastQuestion = "Theek hai. To machine ka silsila number ya 10 digit phone number type karke hash (#) key dabayein. Chassis number boliye.";
+    // ===== ASK IDENTIFIER FOR NON-REGISTERED =====
+    if (callData.step === "ask_identifier") {
+      // Handle STAR (*) key to repeat last question
+      if (Digits === "*") {
+        console.log("🔄 User pressed * - Repeating last question");
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 10,
+          timeout: 20,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
         });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 2) {
-          askDTMF(twiml, "Kripya 1 ya 2 dabayien. Ek agar haan, do agar nahi.", 1);
-        } else {
-          askDTMF(twiml, "Galat input. Kripya 1 ya 2 dabayien.", 1);
-        }
+        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion || "Machine number type karke hash (#) key dabayein.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-    }
 
-    // ===== ASK IDENTIFIER FOR NON-REGISTERED =====
-    if (callData.step === "ask_identifier") {
       // Check if user provided DTMF digits (chassis/phone number)
       let inputToProcess = rawSpeech;
       
       if (Digits && Digits.trim().length > 0) {
         console.log(`🔢 Processing DTMF input: "${Digits}"`);
-        inputToProcess = Digits;
+        // Strip leading # if present (from #number# format)
+        let cleanedDigits = Digits.trim();
+        if (cleanedDigits.startsWith('#')) {
+          cleanedDigits = cleanedDigits.substring(1);
+        }
+        // Strip trailing # if present
+        if (cleanedDigits.endsWith('#')) {
+          cleanedDigits = cleanedDigits.substring(0, cleanedDigits.length - 1);
+        }
+        inputToProcess = cleanedDigits;
+        console.log(`🔧 Cleaned DTMF: "${inputToProcess}"`);
       }
 
       // If no input at all
       if (!inputToProcess || inputToProcess.trim().length === 0) {
         callData.retries = (callData.retries || 0) + 1;
+        console.log(`⚠️ No input received - Retry ${callData.retries}/3`);
 
-        if (callData.retries >= 2) {
-          console.log("❌ No input received - Escalating");
+        if (callData.retries >= 3) {
+          console.log("❌ No input received after 3 retries - Escalating");
           twiml.say(
             { voice: "Polly.Aditi", language: "hi-IN" },
             "Samajh nahi paye. Aapko agent se connect kar rahe hain."
@@ -1157,11 +1185,11 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = "Machine ka chassis number ya phone number de dijiye. Pura number type kar ke hash (#) key dabayein.";
+        callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type karke hash (#) key dabayein.`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
-          timeout: 10,
+          timeout: 20,
           actionOnEmptyResult: true,
           action: "/voice/process",
           method: "POST",
@@ -1199,9 +1227,10 @@ router.post("/process", async (req, res) => {
 
       if (!identifier) {
         callData.retries = (callData.retries || 0) + 1;
+        console.log(`⚠️ Invalid identifier extracted - Retry ${callData.retries}/3`);
 
-        if (callData.retries >= 2) {
-          console.log("❌ No valid identifier found - Fetching from API with raw input");
+        if (callData.retries >= 3) {
+          console.log("❌ No valid identifier found after 3 retries - Fetching from API with raw input");
           
           // Try direct API fetch with the raw input
           let apiUrl = null;
@@ -1256,11 +1285,11 @@ router.post("/process", async (req, res) => {
         }
 
         if (!identifier) {
-          callData.lastQuestion = "Phir se try karein. Sirf chassis number ya phone number type karke hash (#) dabayein.";
+          callData.lastQuestion = `Retry ${callData.retries}/3: Machine number type karke hash (#) key dabayein.`;
           const gather = twiml.gather({
             input: "dtmf",
             finishOnKey: "#",
-            timeout: 10,
+            timeout: 20,
             actionOnEmptyResult: true,
             action: "/voice/process",
             method: "POST",
@@ -1271,14 +1300,99 @@ router.post("/process", async (req, res) => {
         }
       }
 
+      // ===== FETCH MACHINE DATA FROM API =====
+      console.log("\n" + "=".repeat(120));
+      console.log(`🌐 FETCHING MACHINE DATA FROM API FOR IDENTIFIER: ${identifier}`);
+      console.log("=".repeat(120));
+
+      const customerData = await fetchCustomerFromExternal({ 
+        phone: /^\d{10}$/.test(identifier) ? identifier : null,
+        chassisNo: !/^\d{10}$/.test(identifier) ? identifier : null
+      });
+
+      if (!customerData) {
+        console.log("❌ Machine not found in API database");
+        twiml.say(
+          { voice: "Polly.Aditi", language: "hi-IN" },
+          "Hum aapka machine API mein nahi khoj paye. Aapko agent se connect kar rahe hain."
+        );
+        twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+        activeCalls.delete(CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      console.log("✅ Machine found in API!");
+      console.log(`📍 City: ${customerData.city}`);
+      console.log(`👤 Name: ${customerData.name}`);
+      console.log("=".repeat(120) + "\n");
+
+      // ===== CONFIRM CUSTOMER CITY AND NAME =====
       callData.chassis = identifier;
+      callData.customerData = customerData;
       callData.isRegistered = false;
-      callData.step = "ask_caller_name";
+      callData.step = "confirm_customer_details";
       callData.retries = 0;
-      callData.lastQuestion = "Bahut accha! Identifier mil gaya. Ab mujhe batayein, complaint dene wale ka naam kya hai?";
-      ask(twiml, callData.lastQuestion);
+      
+      const confirmQuestion = `Aapka city hai ${customerData.city} aur naam hai ${customerData.name}. Kya yeh theek hai? Haan to 1 dabayein, nahi to 2 dabayein.`;
+      callData.lastQuestion = confirmQuestion;
+      
+      console.log(`🔊 Asking for confirmation: "${confirmQuestion}"`);
+      askDTMF(twiml, confirmQuestion, 1);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
+    }
+
+    // ===== CONFIRM CUSTOMER DETAILS =====
+    if (callData.step === "confirm_customer_details") {
+      if (Digits === "*") {
+        console.log("🔄 User pressed * - Repeating confirmation question");
+        askDTMF(twiml, callData.lastQuestion || "Kya details theek hain? 1 ya 2 dabayein.", 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (Digits === "1") {
+        // Customer confirmed - Continue
+        console.log("✅ Customer confirmed details - Moving to next step");
+        callData.step = "ask_caller_name";
+        callData.retries = 0;
+        callData.lastQuestion = "Bahut accha! Ab mujhe batayein, Aapka Pura naam Kya hain?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else if (Digits === "2") {
+        // Customer denied - Restart
+        console.log("❌ Customer rejected details - Restarting identifier collection");
+        callData.step = "ask_identifier";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai. Dobara: Machine number type karke hash (#) key dabayein.";
+        const gather = twiml.gather({
+          input: "dtmf",
+          finishOnKey: "#",
+          timeout: 20,
+          actionOnEmptyResult: true,
+          action: "/voice/process",
+          method: "POST",
+        });
+        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          console.log("❌ Invalid confirmation after retries - Escalating");
+          twiml.say(
+            { voice: "Polly.Aditi", language: "hi-IN" },
+            "Samajh nahi paye. Aapko agent se connect kar rahe hain."
+          );
+          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+          activeCalls.delete(CallSid);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        askDTMF(twiml, "Kripya 1 ya 2 dabayien.", 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
     }
 
     // ===== ASK CHASSIS (FOR REGISTERED CUSTOMERS) =====
@@ -1338,7 +1452,7 @@ router.post("/process", async (req, res) => {
       callData.isRegistered = true;
       callData.step = "ask_caller_name";
       callData.retries = 0;
-      callData.lastQuestion = "Bahut accha! Machine mil gayi. Ab mujhe batayein, complaint dene wale ka naam kya hai? Apna pura naam boliye.";
+      callData.lastQuestion = "Bahut accha! Machine mil gayi. Ab mujhe batayein, Aapka Pura Naam Kya hain?";
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -1502,6 +1616,14 @@ router.post("/process", async (req, res) => {
 
     // ===== ASK MACHINE TYPE - NUMERIC IVR =====
     if (callData.step === "ask_machine_type_numeric") {
+      // Handle STAR (*) key to repeat last question
+      if (Digits === "*") {
+        console.log("🔄 User pressed * - Repeating machine type question");
+        askDTMF(twiml, callData.lastQuestion || "1 se 5 ke beech koi dabayien.", 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       const machineType = getMachineTypeByNumber(Digits);
 
       if (Digits && ['1', '2', '3', '4', '5'].includes(Digits)) {
@@ -1585,6 +1707,14 @@ router.post("/process", async (req, res) => {
 
     // ===== ASK MACHINE STATUS - NUMERIC IVR =====
     if (callData.step === "ask_machine_status_numeric") {
+      // Handle STAR (*) key to repeat last question
+      if (Digits === "*") {
+        console.log("🔄 User pressed * - Repeating machine status question");
+        askDTMF(twiml, callData.lastQuestion || "1 ya 2 dabayien.", 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       const status = getMachineStatusByNumber(Digits);
 
       if (Digits && ['1', '2'].includes(Digits)) {
@@ -1615,7 +1745,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = "Galat input! Sirf 1 ya 2 dabayein. 1 for Breakdown ya 2 for Running With Problem.";
+        callData.lastQuestion = "Galat input! Sirf 1 ya 2 dabayein. 1 for Breakdown ya 2 for Running With Problem. Dobara sunne ke liye star (*) dabayien.";
         askDTMF(twiml, callData.lastQuestion, 1);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
