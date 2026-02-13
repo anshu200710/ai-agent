@@ -161,269 +161,272 @@ const jobLocationKeywords = {
 
 /* ======================= COMPREHENSIVE COMPLAINT MAP ======================= */
 const complaintMap = {
-  "AC System": {
-    keywords: [
-      "ac", "a.c", "a c", "air conditioner", "air conditioning", "cooling",
-      "cooler", "climate", "temperature control",
-      "एसी", "ऐसी", "एकसी", "ए सी", "ए.सी", "एयर कंडीशनर",
-      "ठंडा", "ठंडी", "कूलिंग", "कूल", "ठंड", "एयर कंडीशनिंग"
-    ],
-    priority: 10,
+  "Body Work": {
+    keywords: ["body", "bodywork", "bushing", "leakage", "drum", "noise", "vibration", "water", "pipe", "color", "decal", "sticker", "पेटिंग", "शरीर", "शरीर काम", "बाडी", "बॉडी", "body work", "बॉडीवर्क", "बॉडी वर्क"],
+    priority: 5,
     subTitles: {
-      "AC not Working": [
-        "नहीं चल", "नई चल", "band", "बंद", "काम नहीं", "work नहीं",
-        "चालू नहीं", "start नहीं", "on नहीं", "नहीं हो रहा",
-        "not working", "stopped", "dead", "खराब", "not turning on",
-        "AC बंद", "AC काम नहीं", "AC खराब"
-      ],
-      "AC not Cooling": [
-        "cooling", "ठंडा नहीं", "ठंडी नहीं", "कूलिंग नहीं", "cool नहीं",
-        "गरम", "गर्म", "heat", "hot", "ठंड नहीं", "thanda nahi",
-        "चालू है लेकिन", "on hai lekin", "chal rahi lekin",
-        "ठंडा नहीं कर रहा", "cooling नहीं दे रहा", "हवा गरम",
-        "not cooling", "warm air", "no cooling", "गरम हवा",
-        "ठंडक नहीं", "AC चल रहा है पर ठंडा नहीं"
-      ]
-    }
-  },
-
-  "Brake": {
-    keywords: [
-      "brake", "ब्रेक", "braking", "stop", "रोक", "रुकना",
-      "brake fail", "brake problem", "brake issue", "ब्रेक समस्या"
-    ],
-    priority: 9,
-    subTitles: {
-      "Brake Not Working": [
-        "brake नहीं लग रहा", "brake काम नहीं कर रहा", "brake fail",
-        "ब्रेक नहीं लग", "ब्रेक फेल", "brake failure", "brake dead",
-        "नहीं रुक रहा", "रुक नहीं रहा", "stop नहीं"
-      ],
-      "Weak Braking": [
-        "brake कमजोर", "weak braking", "brake soft", "brake loose",
-        "ब्रेक कमजोर", "brake pressure कम", "pressure down"
-      ]
-    }
-  },
-
-  "Engine": {
-    keywords: [
-      "engine", "motor", "smoke", "overheat", "heat", "power",
-      "starting", "noise", "sound", "chal nahi", "चल नहीं", "चलना",
-      "start", "स्टार्ट", "शुरू", "start problem", "starting problem",
-      "chalu nahi", "चालू नहीं", "bilkul band", "बिल्कुल बंद", "काम नहीं",
-      "एक्सीलेंट नहीं", "acccelerator", "performance", "power",
-      "इंजन", "इंडियन", "मोटर", "धुआ", "धुंआ", "गरम", "गर्म",
-      "पावर", "शक्ति", "ताकत", "आवाज", "शोर",
-      "kaam nahi kar raha", "काम नहीं कर रहा", "काम ही नहीं",
-      "par chal raha par problem", "problem ke saath chal",
-      "कम से कम ताकत", "कमजोर हो गया", "रफ्तार कम"
-    ],
-    priority: 9,
-    subTitles: {
-      "Starting trouble": [
-        "start", "स्टार्ट", "शुरू", "chalu nahi", "चालू नहीं",
-        "self", "सेल्फ", "starter", "स्टार्टर", "kick",
-        "start problem", "start नहीं", "शुरू नहीं", "starting",
-        "स्टार्टिंग", "dikkat", "दिक्कत", "hone mein", "होने में",
-        "shuru hone", "नहीं हो रहा", "not starting", "won't start",
-        "starting issue", "start नहीं हो रहा", "engine start नहीं",
-        "chal nahi raha shuru mein", "चल नहीं रहा शुरू में",
-        "start on nahi aa raha", "स्टार्ट ऑन नहीं आ रहा",
-        "kick नहीं दे रहा", "hand crank नहीं", "electric start नहीं",
-        "motor nahi on ho raha", "मोटर नहीं ऑन हो रहा"
-      ],
-      "Engine Over heating": [
-        "overheat", "over heat", "गरम", "गर्म", "heat", "गर्मी",
-        "hot", "गरमी", "तापमान", "temperature", "hit", "हिट",
-        "गर्म हो", "garam ho", "overheat ho", "ज्यादा गरम",
-        "बहुत गरम", "overheating", "heating problem", "engine गर्म",
-        "ज्यादा गर्म हो जाता", "steam निकल रहा", "coolant issue"
-      ],
-      "Smoke problem": [
-        "smoke", "धुआ", "धुंआ", "dhuan", "काला धुआ", "black smoke",
-        "white smoke", "सफेद धुआ", "blue smoke", "नीला धुआ",
-        "smoke आ रहा", "smoke निकल रहा", "smoke ज्यादा",
-        "धुआ ज्यादा निकल रहा", "oil smoke", "तेल का धुआ",
-        "exhaust smoke", "एग्जॉस्ट से धुआ"
-      ],
-      "Abnormal Noise": [
-        "noise", "sound", "आवाज", "शोर", "awaaz", "खड़खड़",
-        "आवाज आ", "sound aa", "strange sound", "weird noise",
-        "असामान्य आवाज", "खटखट", "घर्र", "घरघर",
-        "strange awaaz", "engine noise", "weird engine sound",
-        "thump-thump", "clinking", "knocking sound"
-      ],
-      "Engine Performance Low": [
-        "power कम", "performance कम", "slow", "धीमा", "weak",
-        "कमजोर", "sluggish", "no power", "उठ नहीं रहा",
-        "उतार नहीं", "acceleration नहीं", "खींचने वाली नहीं",
-        "रफ्तार कम है", "ताकत कम हो गई", "acceleration problem",
-        "engine को ताकत नहीं है", "engine कमजोर हो गया"
-      ]
-    }
-  },
-
-  "Hydraulic": {
-    keywords: [
-      "hydraulic", "pressure", "pump", "oil", "flow", "valve",
-      "cylinder", "slow", "weak",
-      "हाइड्रोलिक", "प्रेशर", "दबाव", "पंप", "तेल", "धीमा",
-      "कमजोर", "स्लो"
-    ],
-    priority: 8,
-    subTitles: {
-      "Pressure down": [
-        "pressure", "प्रेशर", "कम", "low pressure", "दबाव कम",
-        "pressure down", "प्रेशर डाउन", "pressure नहीं",
-        "प्रेशर कम", "pressure fall", "दबाव कम हो गया"
-      ],
-      "Slow working": [
-        "slow", "धीरे", "धीमा", "कम speed", "power kam", "पावर कम",
-        "performance low", "weak", "कमजोर", "sluggish", "स्लो वर्किंग",
-        "काम धीमा", "speed कम", "काम धीरे चल रहा"
-      ],
-      "Hydraulic pump leak": [
-        "pump leak", "पंप लीक", "pump से leak", "hydraulic leak",
-        "तेल लीक", "oil leak", "हाइड्रोलिक लीकेज"
-      ]
-    }
-  },
-
-  "Electrical Complaint": {
-    keywords: [
-      "electrical", "electric", "battery", "light", "wiring", "wire",
-      "starter", "alternator", "fuse", "relay", "switch",
-      "बिजली", "बैटरी", "लाइट", "वायरिंग", "तार", "self", "सेल्फ",
-      "स्टार्टर", "इलेक्ट्रिकल", "बत्ती"
-    ],
-    priority: 8,
-    subTitles: {
-      "Starting trouble": [
-        "start problem", "start नहीं हो रही", "स्टार्ट दिक्कत",
-        "स्टार्ट नहीं हो रही", "स्टार्ट ट्रबल", "स्टार्ट",
-        "self problem", "सेल्फ प्रॉब्लम", "सेल्फ नहीं",
-        "chalu nahi ho rahi", "starting issue", "starting trouble",
-        "शुरू नहीं", "शुरू नहीं हो रहा", "start नहीं", "नहीं चालू हो रहा",
-        "not starting", "won't start", "starting problem"
-      ],
-      "Battery problem": [
-        "battery", "बैटरी", "dead", "खत्म", "discharge", "डिस्चार्ज",
-        "charge nahi", "चार्ज नहीं", "battery down", "battery low",
-        "बैटरी खराब", "बैटरी डाउन", "बैटरी कम"
-      ],
-      "Light not working": [
-        "light", "लाइट", "light problem", "बत्ती", "light not on",
-        "light नहीं जल रही", "लाइट नहीं जल रही"
-      ]
-    }
-  },
-
-  "Tyre/Battery": {
-    keywords: [
-      "tyre", "tire", "battery", "puncture", "टायर", "बैटरी",
-      "पंक्चर", "wheel", "पहिया"
-    ],
-    priority: 7,
-    subTitles: {
-      "Battery problem": [
-        "battery", "बैटरी", "dead battery", "बैटरी खराब",
-        "बैटरी डाउन", "battery issue"
-      ],
-      "Tube puncture": [
-        "tube puncture", "ट्यूब पंक्चर", "tube फूटा", "puncture",
-        "पंक्चर", "puncture दे दिया"
-      ],
-      "Tyre cut": [
-        "tyre cut", "tire cut", "टायर कटा", "tyre damage",
-        "टायर खराब", "tyre टूटा"
-      ]
-    }
-  },
-
-  "Transmission/Axle components": {
-    keywords: [
-      "transmission", "gear", "brake", "axle", "ट्रांसमिशन",
-      "गियर", "ब्रेक", "clutch", "क्लच"
-    ],
-    priority: 7,
-    subTitles: {
-      "Abnormal sound": [
-        "sound", "noise", "आवाज", "शोर", "transmission noise",
-        "gear noise", "transmission आवाज"
-      ],
-      "Brake problem": [
-        "brake", "ब्रेक", "braking", "ब्रेक नहीं", "brake issue",
-        "brake नहीं लग रहा"
-      ],
-      "Gear problem": [
-        "gear", "गियर", "gear problem", "gear issue", "गियर समस्या",
-        "gear hard", "gear सख्त"
-      ]
+      "Select Body Work": ["body", "बॉडी"],
+      "Bushing Work": ["bushing", "बुशिंग", "बुशिग", "बुसिंग"],
+      "Leakage from Drum": ["leakage", "drum", "leak", "लीकेज", "लीक", "ड्रम"],
+      "Noise from Drum": ["noise", "drum", "आवाज", "ड्रम"],
+      "Vibration fault in Drum": ["vibration", "कंपन", "कंपती", "कम्पन"],
+      "Water Sprinkle Pipe fault": ["water", "pipe", "पाइप", "पाईप", "पाइप्स"],
+      "Other": ["other", "अन्य"]
     }
   },
 
   "Cabin": {
-    keywords: [
-      "cabin", "cab", "door", "glass", "seat", "केबिन", "सीट",
-      "दरवाजा", "शीशा", "window"
-    ],
-    priority: 5,
+    keywords: ["cabin", "cab", "door", "glass", "window", "bonnet", "seat", "roof", "fan", "केबिन", "सीट", "दरवाजा", "शीशा", "कैबिन", "कैबीन", "केबीन", "खिड़की", "छत", "फैन"],
+    priority: 6,
     subTitles: {
-      "Cab Door Fault": [
-        "door", "दरवाजा", "door problem", "door issue",
-        "door खराब", "door नहीं खुल रहा"
-      ],
-      "Cabin glass cracked": [
-        "glass crack", "शीशा टूटा", "glass broken", "window crack",
-        "शीशा टूटा"
-      ],
-      "Operator Seat problems": [
-        "seat", "सीट", "seat problem", "sitting", "सीट खराब"
-      ]
+      "Select Cabin": ["cabin", "कैबिन"],
+      "bonnet crack": ["bonnet", "बोनेट", "बोनिट"],
+      "Cab Door Fault": ["door", "दरवाजा", "दरवाज़ा", "दरवाज", "ड्योढी"],
+      "Cabin glass cracked": ["glass", "शीशा", "ग्लास", "शीशे"],
+      "Cabin Glass removed": ["removed", "हटा", "हटाया", "निकला"],
+      "Door/window lock inoperative": ["lock", "लॉक", "लोक", "ताला"],
+      "Fan not working": ["fan", "पंखा", "फैन", "पंखे"],
+      "mounting problem": ["mounting", "माउंटिंग", "माउंटिग", "लगाना"],
+      "Operator Seat problems": ["seat", "सीट", "सीट्स", "आसन"],
+      "Roof cracked": ["roof", "छत", "छतरी"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Electrical Complaint": {
+    keywords: ["electrical", "electric", "light", "battery", "alternator", "starter", "switch", "relay", "wiring", "error code", "बिजली", "लाइट", "बैटरी", "तार", "इलेक्ट्रिक्स", "इलेक्ट्रीकल", "बिजलीय", "लाईट", "बैट्री", "बिजली की समस्या", "विद्युत"],
+    priority: 8,
+    subTitles: {
+      "Select Electrical Complaint": ["electrical", "बिजली"],
+      "Alternator not Working": ["alternator", "आल्टरनेटर", "ऑल्टरनेटर", "आल्टर"],
+      "Error Code in Machine display": ["error", "code", "error code", "error कोड", "एरर कोड"],
+      "Fuel Gauge not show": ["gauge", "fuel gauge", "गेज", "फ्यूल गेज"],
+      "Fuel Motor not Working": ["fuel motor", "फ्यूल मोटर"],
+      "Hour meter not working": ["hour meter", "आवर मीटर", "घंटा मीटर"],
+      "Light glowing problem": ["light", "लाइट", "लाईट", "रोशनी"],
+      "Relay fault": ["relay", "रिले", "रिलै"],
+      "Self/Starter motor problem": ["self", "starter", "सेल्फ", "स्टार्टर", "स्टार्टर मोटर"],
+      "Starting trouble": ["start", "शुरू", "स्टार्ट", "स्टार्टिग"],
+      "Switch Fault": ["switch", "स्विच", "स्वीच", "स्विच्च"],
+      "Wiper motor not working": ["wiper", "वाइपर", "वेपर"],
+      "Wiring problem": ["wiring", "तार", "वायरिंग", "वायरीग", "तारों"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Engine": {
+    keywords: ["engine", "motor", "start", "smoke", "overheat", "noise", "power", "oil", "leakage", "seal leak", "fan belt", "इंजन", "मोटर", "शुरू", "धुआ", "गर्मी", "आवाज", "इंडियन", "मोटर्स", "इंजिन", "इंजीन", "मोटर्स", "इंजिन की समस्या", "मोटर समस्या", "स्टार्ट नहीं", "चलना", "चल नहीं रहा", "चालू", "चाल"],
+    priority: 10,
+    subTitles: {
+      "Select Engine": ["engine", "इंजन"],
+      "Abnormal Noise": ["noise", "आवाज", "sound", "शोर", "खर्र", "खड़खड़", "आवज़", "सोंड"],
+      "Air problem": ["air", "हवा", "एयर", "एर"],
+      "coolant leak": ["coolant", "कूलेंट", "कूलेन्ट", "ठंडक"],
+      "Engine accessories": ["accessories", "एक्सेसरीज"],
+      "Engine Lugg down": ["lugg", "down", "लग", "लड़"],
+      "Engine Over heating": ["overheat", "गर्म", "गरम", "ओवरहीट", "ओवर हीट"],
+      "Engine seal leak": ["seal", "leak", "लीक", "सील"],
+      "Fan belt broken": ["fan", "belt", "फैन", "बेल्ट"],
+      "Fuel consumption high": ["fuel", "consumption", "फ्यूल", "कंजम्पशन"],
+      "Leakages engine": ["leakage", "लीकेज", "लीक", "लीकेथ"],
+      "Oil consumption high": ["oil", "consumption", "तेल", "कंजम्पशन"],
+      "Radiator leak": ["radiator", "रेडिएटर", "रेडिएटर से लीक"],
+      "Smoke problem": ["smoke", "dhuan", "धुआ", "स्मोक", "धुंआ"],
+      "Engine mounting problem": ["mounting", "माउंटिंग", "माउंट"],
+      "Accelerator cable problem": ["accelerator", "एक्सेलरेटर"],
+      "Starting trouble": ["start", "starting", "शुरू", "स्टार्ट", "स्टार्ट नहीं"],
+      "Other": ["other", "अन्य"]
     }
   },
 
   "Fabrication part": {
-    keywords: [
-      "fabrication", "crack", "boom", "bucket", "chassis",
-      "फैब्रिकेशन", "क्रैक", "crack", "broken", "टूटा", "फटा"
-    ],
-    priority: 5,
+    keywords: ["fabrication", "boom", "bucket", "chassis", "dipper", "crack", "leak", "fuel tank", "hydraulic tank", "टूटा", "फटा", "क्रैक", "फैब्रिकेशन", "फैबिकेशन", "क्रैक्स", "बूम", "बकेट", "चेसिस"],
+    priority: 6,
     subTitles: {
-      "Boom cracked": [
-        "boom crack", "boom फटी", "boom broken", "boom टूटा",
-        "boom में क्रैक"
-      ],
-      "Bucket cracked": [
-        "bucket crack", "bucket फटी", "bucket broken",
-        "bucket टूटा"
-      ],
-      "Chassis cracked": [
-        "chassis crack", "chassis फटी", "chassis broken"
-      ]
+      "Select Fabrication part": ["fabrication", "फैब्रिकेशन"],
+      "Boom cracked": ["boom", "crack", "बूम", "क्रैक"],
+      "Bucket cracked": ["bucket", "crack", "बकेट", "क्रैक"],
+      "Bucket issue": ["bucket", "बकेट", "बालटी"],
+      "Chassis cracked": ["chassis", "चेसिस", "चेसी"],
+      "Dipper cracked": ["dipper", "डिपर", "डिप्पर"],
+      "Fuel Tank Leakage": ["fuel tank", "leak", "फ्यूल टैंक", "टैंक"],
+      "Hydraulic Tank leakage": ["hydraulic tank", "हाइड्रोलिक टैंक"],
+      "King post problem": ["king post", "किंग पोस्ट"],
+      "Loader arm": ["loader arm", "लोडर आर्म", "लोडर"],
+      "Pin broken": ["pin", "पिन"],
+      "Teeth broken": ["teeth", "दांत"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Transmission/Axle components": {
+    keywords: ["transmission", "gear", "axle", "brake", "oil leak", "overheat", "ट्रांसमिशन", "गियर", "ब्रेक", "ट्रान्समिशन", "ट्रांसमीशन", "गीयर", "ब्रेक्स"],
+    priority: 7,
+    subTitles: {
+      "Select Transmission/Axle": ["transmission", "ट्रांसमिशन"],
+      "Abnormal sound Transmission": ["sound", "noise", "आवाज"],
+      "Brake problem": ["brake", "ब्रेक", "ब्रेक्स"],
+      "Gear box problem": ["gear", "gearbox", "गियर", "गीयर"],
+      "Gear hard": ["gear hard", "गियर सख्त"],
+      "Oil leak from transmission": ["oil leak", "तेल लीक"],
+      "Reverse forward issue": ["reverse", "रिवर्स"],
+      "Transmission overheat": ["overheat", "गर्मी"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Hose": {
+    keywords: ["hose", "hose leak", "hose cut", "o ring", "होज़", "होज", "होज़े", "पाइप", "ट्यूब"],
+    priority: 4,
+    subTitles: {
+      "Select Hose": ["hose", "होज़"],
+      "Hose O ring Cut": ["o ring", "ओ रिंग"],
+      "Hose cut": ["hose cut", "होज़ कटा"],
+      "Hose leakages": ["leak", "leakage", "लीकेज"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Hydraulic": {
+    keywords: ["hydraulic", "pressure", "pump", "valve", "seal leak", "performance", "oil cooler", "motion cable", "प्रेशर", "दबाव", "पंप", "हाइड्रोलिक", "हाइड्रोलीक", "प्रेशर की समस्या", "दबाव में समस्या", "हाइड्रो", "पंप की समस्या"],
+    priority: 8,
+    subTitles: {
+      "Select Hydraulic": ["hydraulic", "हाइड्रोलिक"],
+      "Abnormal sound": ["sound", "noise", "आवाज"],
+      "Control Valve leakage": ["valve", "वाल्व", "वेल्व"],
+      "EVB seal leak": ["seal leak", "सील"],
+      "Hydra clamp issue": ["clamp", "क्लैम्प"],
+      "Hydraulic pump broken": ["pump broken", "पंप टूटा"],
+      "Hydraulic pump leak": ["pump leak", "पंप लीक"],
+      "Hydraulic pump Noise": ["pump noise", "पंप आवाज"],
+      "LVB seal leak": ["seal leak", "सील लीक"],
+      "Machine performance low": ["performance low", "slow", "धीमा", "परफॉर्मेंस कम"],
+      "Oil cooler leak": ["cooler", "कूलर"],
+      "Pressure down": ["pressure down", "दबाव कम", "दबाव में कमी"],
+      "Swing Motor leakage": ["swing motor", "स्विंग मोटर"],
+      "Swing Motor not braking": ["not braking", "नहीं रुक रहा"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Ram/Cylinder": {
+    keywords: ["ram", "cylinder", "seal leak", "rod", "leak", "सिलिंडर", "रॉड", "सिलेंडर", "सिलिन्डर", "रॉड्स", "सील"],
+    priority: 6,
+    subTitles: {
+      "Select Ram/Cylinder": ["ram", "cylinder", "सिलिंडर"],
+      "Boom ram seal leak": ["boom ram", "बूम रैम"],
+      "bucket ram seal leak": ["bucket ram", "बकेट रैम"],
+      "Cylinder welding leak": ["cylinder", "सिलिंडर"],
+      "Dipper ram seal leak": ["dipper ram", "डिपर रैम"],
+      "Ram leak": ["ram leak", "रैम लीक"],
+      "Rod bend": ["rod bend", "रॉड मुड़ा"],
+      "Rod broken": ["rod broken", "रॉड टूटा"],
+      "Slew ram seal leak": ["slew ram", "स्लू रैम"],
+      "Other": ["other", "अन्य"]
     }
   },
 
   "Service": {
-    keywords: [
-      "service", "servicing", "maintenance", "सर्विस", "सर्विसिंग",
-      "मेंटेनेंस", "checking", "चेकिंग"
-    ],
+    keywords: ["service", "servicing", "maintenance", "checkup", "visit", "सर्विस", "मेंटेनेंस", "रखरखाव", "सर्विसिंग", "सर्विस की", "मेंटेनेंस की", "मेंटेनेन्स"],
     priority: 3,
     subTitles: {
-      "Regular Service": [
-        "regular service", "normal service", "general service"
-      ],
-      "Maintenance": ["maintenance", "मेंटेनेंस"]
+      "Actual Service": ["service", "actual", "सर्विस"],
+      "Service Visit": ["visit", "विजिट"],
+      "Other": ["other", "अन्य"]
     }
   },
 
-  "General Problem": {
-    keywords: ["problem", "issue", "problem", "समस्या", "दिक्कत"],
+  "Tyre/Battery": {
+    keywords: ["tyre", "tire", "battery", "tube", "puncture", "टायर", "बैटरी", "पंक्चर", "ट्यूब", "बैट्री", "पंक्चर का", "टायर की"],
+    priority: 7,
+    subTitles: {
+      "Select Tyre/Battery": ["tyre", "battery", "टायर"],
+      "Battery problem": ["battery", "बैटरी", "बैट्री"],
+      "Tube joint opened": ["tube", "ट्यूब"],
+      "Tube puncture": ["puncture", "पंक्चर", "पंचर"],
+      "Tyre burst": ["burst", "फूला", "फूलना"],
+      "Tyre cut": ["cut", "कटा", "कटी"],
+      "Tyre rubber breaking": ["rubber", "रबर"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "Under Carriage": {
+    keywords: ["under carriage", "idler", "roller", "sprocket", "track", "gear", "अंडर कैरिएज", "आइडलर", "रोलर", "स्प्रोकेट", "ट्रैक"],
+    priority: 5,
+    subTitles: {
+      "Select Under Carriage": ["carriage", "कैरिएज"],
+      "Idler wheel leakage": ["idler", "आइडलर"],
+      "Idler wheel noise": ["idler noise", "आइडलर आवाज"],
+      "Ring gear Crack": ["ring gear", "रिंग गियर"],
+      "Roller Bent": ["roller", "रोलर"],
+      "Roller leakage": ["leakage", "लीकेज"],
+      "Sprocket Wear": ["sprocket", "स्प्रोकेट"],
+      "Track Motor leak": ["track", "ट्रैक"],
+      "Track Shoe bend": ["track shoe", "ट्रैक शू"],
+      "Other": ["other", "अन्य"]
+    }
+  },
+
+  "PDI": {
+    keywords: ["pdi", "pre delivery inspection", "पीडीआई", "प्री डिलीवरी"],
     priority: 1,
     subTitles: {
-      "Other": ["other", "कुछ और", "something else"]
+      "PDI": ["pdi", "पीडीआई"]
+    }
+  },
+
+  "Installation": {
+    keywords: ["installation", "install", "इंस्टॉलेशन", "इंस्टालेशन", "इंस्टलेशन"],
+    priority: 2,
+    subTitles: {
+      "Installation visit": ["installation", "इंस्टॉलेशन"]
+    }
+  },
+
+  "General Visit": {
+    keywords: ["visit", "general", "asc", "bw", "monthly", "number plate", "accidental", "विजिट", "सामान्य"],
+    priority: 1,
+    subTitles: {
+      "General Visit": ["general", "visit", "विजिट"],
+      "Monthly Visit": ["monthly", "मासिक"],
+      "Number plate fitment": ["number plate", "नंबर प्लेट"],
+      "Accidental": ["accidental", "accident", "दुर्घटना"]
+    }
+  },
+
+  "Livelink": {
+    keywords: ["livelink", "alert", "लाइवलिंक", "एलर्ट"],
+    priority: 1,
+    subTitles: {
+      "Livelink not working": ["livelink not", "not working"],
+      "Alert": ["alert", "एलर्ट"]
+    }
+  },
+
+  "ECU problem": {
+    keywords: ["ecu", "error code", "sensor", "ईसीयू", "ई सी यू", "सेंसर"],
+    priority: 6,
+    subTitles: {
+      "ECU problem": ["ecu", "ईसीयू"]
+    }
+  },
+
+  "Campaign": {
+    keywords: ["campaign", "fsi", "कैंपेन", "कैम्पेन", "कैम्पेन की"],
+    priority: 1,
+    subTitles: {
+      "Campaign Visit": ["campaign", "कैंपेन"],
+      "FSI": ["fsi", "एफएसआई"]
+    }
+  },
+
+  "AC System": {
+    keywords: ["ac", "a.c", "air conditioner", "cooling", "ठंडा", "कूलिंग", "एसी", "ए सी", "एसी की", "एक", "एकसी", "एयर कंडीशनर", "कूल", "ठंडी"],
+    priority: 10,
+    subTitles: {
+      "AC not Working": ["not working", "काम नहीं", "नहीं चल", "खराब"],
+      "AC not Cooling": ["not cooling", "ठंडा नहीं", "कूलिंग नहीं", "ठंड नहीं"]
     }
   }
 };
@@ -2291,7 +2294,7 @@ router.post("/process", async (req, res) => {
       // Handle STAR (*) key to repeat last question
       if (Digits === "*") {
         console.log("🔄 User pressed * - Repeating complaint question");
-        callData.lastQuestion = "Machine mein kya problem hai? Boliye na, thoda detail mein.";
+        callData.lastQuestion = "Machine ya equipment mein kya problem hai? Pura detail mein boliye na. Jaise: engine chalti nahi, ac thandi nahi kar rahi, hydraulic pressure kam hai, etc.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2311,7 +2314,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        console.log(`⚠️ Invalid complaint input - Retry ${callData.retries}/3`);
+        console.log(`⚠️ Invalid complaint input - Retry ${callData.retries}/2`);
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2319,46 +2322,14 @@ router.post("/process", async (req, res) => {
 
       callData.rawComplaint = rawSpeech;
       const detected = detectComplaint(rawSpeech);
-      const complainText = rawSpeech.toLowerCase();
+      console.log(`🔍 Complaint detection result: ${detected.complaint} (Score: ${detected.score})`);
 
-      // Check for Engine or AC mentions - add clarification
-      const isEngineKeyword = /engine|motor|chal|चल|start|स्टार्ट|शुरू|chalu|चालू|कार्य|काम|smoke|धुआ|power|पावर/.test(complainText);
-      const isAcKeyword = /ac|ऐसी|एसी|cooling|कूलिंग|thandi|ठंडी|cool|कूल/.test(complainText);
-
-      if (!detected || detected.score < 5) {
-        // Ask follow-up questions to clarify the complaint
-        callData.step = "ask_complaint_detail";
-        
-        let followUpQuestion = "Machine mein exactly kya problem hai? Thoda detail mein batayein.";
-        
-        if (isEngineKeyword) {
-          followUpQuestion = "Bilkul - Engine ke liye: Kya engine shuru nahi ho raha? Ya chalu hai lekin oil leak, dhuan, ya abnormal noise? Ya engine start to ho raha lekin power kam? Boliye na.";
-        } else if (isAcKeyword) {
-          followUpQuestion = "AC ke liye: Kya AC bilkul band hai ya chalti hai lekin thandi nahi kar rahi? Boliye.";
-        }
-        
-        callData.lastQuestion = followUpQuestion;
-        ask(twiml, followUpQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (!detected || !detected.complaint || detected.score < 3) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 2) {
-          console.log("❌ Complaint not clear after 2 retries - Transferring to agent");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Samajh nahi aa raha. Aapko agent se connect kar dete hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Complaint unclear - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "Problem clear samajh nahi aaya. Dobara thoda detail mein batayein.";
+      // If no clear match or low score
+      if (!detected || detected.score < 3) {
+        console.log(`⚠️ No clear complaint match - Asking clarifying questions`);
+        callData.step = "ask_complaint_clarify";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai, thoda aur detail mein batayein. Kab se ye problem hai? Machine ke start mein tha ya baad mein? Ya kuch electrical problem hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2366,69 +2337,147 @@ router.post("/process", async (req, res) => {
 
       console.log(`✓ Complaint detected: ${detected.complaint} (Score: ${detected.score})`);
       callData.complaintTitle = detected.complaint;
+      
+      // Ask for confirmation before proceeding
+      callData.step = "confirm_complaint_title";
+      callData.retries = 0;
+      callData.lastQuestion = `Theek hai samajh gaya. Toh aapka complaint category hai: ${detected.complaint}. Kya ye theek hai? Agar sahi hai to 1 dabayein, agar galat hai to 2 dabayein.`;
+      askDTMF(twiml, callData.lastQuestion, 1);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
 
-      const hasSubComplaints = complaintMap[detected.complaint]?.subTitles &&
-                              Object.keys(complaintMap[detected.complaint].subTitles).length > 0;
+    // ===== CONFIRM COMPLAINT TITLE =====
+    if (callData.step === "confirm_complaint_title") {
+      if (Digits === "*") {
+        console.log("🔄 User pressed * - Repeating confirmation question");
+        callData.lastQuestion = "Complaint category sahi hai na? 1 dabayein agar haan, 2 agar nahi.";
+        askDTMF(twiml, callData.lastQuestion, 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
-      if (hasSubComplaints) {
-        const subResult = detectSubComplaint(detected.complaint, rawSpeech);
+      if (Digits === "1") {
+        console.log(`✓ User confirmed complaint title: ${callData.complaintTitle}`);
+        
+        // Check if this category has sub-complaints
+        const hasSubComplaints = complaintMap[callData.complaintTitle]?.subTitles &&
+                                Object.keys(complaintMap[callData.complaintTitle].subTitles).length > 1;
 
-        if (subResult && subResult.subTitle !== "Other" && subResult.confidence > 0.6) {
-          callData.complaintSubTitle = subResult.subTitle;
-          console.log(`✓ Sub-complaint auto-detected: ${subResult.subTitle}`);
-          
-          callData.step = "confirm_complaint";
-          callData.lastQuestion = `Theek hai, samajh gaya. Toh aapka complaint hai: ${callData.complaintTitle} - ${callData.complaintSubTitle}. Sahi hai? Press 1 for Yes, Press 2 for No.`;
-          askDTMF(twiml, callData.lastQuestion, 1);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        } else {
+        if (hasSubComplaints) {
+          // Move to sub-complaint selection
           callData.step = "ask_sub_complaint";
           callData.retries = 0;
-          const subQuestion = getSubComplaintQuestion(detected.complaint);
+          const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
           callData.lastQuestion = subQuestion;
           ask(twiml, subQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
+        } else {
+          // No sub-complaints, go directly to service date
+          callData.complaintSubTitle = "General";
+          callData.step = "ask_service_date";
+          callData.retries = 0;
+          callData.lastQuestion = "Shukriya! Ab batayein, engineer ke liye kaun si tarikh theek hai? Date boliye - jaise: 15 february, 15/2, aaj, kal, ya parso.";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
         }
+      } else if (Digits === "2") {
+        console.log(`❌ User rejected complaint title - Re-asking`);
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai dobara puchta hoon. Machine ya equipment mein asliye kya problem hai? Pura detail mein boliye.";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
       } else {
-        callData.complaintSubTitle = "Other";
-        callData.step = "confirm_complaint";
-        callData.lastQuestion = `Theek hai. Toh aapka complaint hai: ${callData.complaintTitle}. Kya ye sahi hai? Press 1 for Yes, Press 2 for No.`;
-        askDTMF(twiml, callData.lastQuestion, 1);
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          console.log("❌ Invalid confirmation after retries - Using detected complaint");
+          // Use the detected complaint as-is
+          const hasSubComplaints = complaintMap[callData.complaintTitle]?.subTitles &&
+                                  Object.keys(complaintMap[callData.complaintTitle].subTitles).length > 1;
+
+          if (hasSubComplaints) {
+            callData.step = "ask_sub_complaint";
+            callData.retries = 0;
+            const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
+            callData.lastQuestion = subQuestion;
+            ask(twiml, subQuestion);
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          } else {
+            callData.complaintSubTitle = "General";
+            callData.step = "ask_service_date";
+            callData.retries = 0;
+            callData.lastQuestion = "Chalo aage badhte hain. Engineer ke liye kaun si tarikh theek hai?";
+            ask(twiml, callData.lastQuestion);
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          }
+        }
+        
+        askDTMF(twiml, "Kripya 1 ya 2 dabayein. 1 agar sahi, 2 agar galat.", 1);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
     }
 
-    // ===== ASK COMPLAINT DETAIL =====
-    if (callData.step === "ask_complaint_detail") {
-      // Handle STAR (*) key to repeat last question
+    // ===== ASK COMPLAINT CLARIFICATION =====
+    if (callData.step === "ask_complaint_clarify") {
       if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating complaint detail question");
-        callData.lastQuestion = "Machine mein bilkul kya problem hai? Thoda aur detail boliye na.";
+        console.log("🔄 User pressed * - Repeating clarification question");
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      callData.rawComplaint = rawSpeech;
-      const detected = detectComplaint(rawSpeech);
-
-      if (!detected || !detected.complaint) {
-        callData.complaintTitle = "General Problem";
-        callData.complaintSubTitle = "Other";
-      } else {
-        callData.complaintTitle = detected.complaint;
-        const subResult = detectSubComplaint(detected.complaint, rawSpeech);
-        callData.complaintSubTitle = subResult.subTitle || "Other";
+      if (rejectInvalid(rawSpeech)) {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          // If still no clear complaint, use "Other"
+          console.log("❌ Complaint still unclear - Using 'Other' category");
+          callData.complaintTitle = "General Problem";
+          callData.complaintSubTitle = "Other";
+          callData.step = "ask_service_date";
+          callData.retries = 0;
+          callData.lastQuestion = "Theek hai bas. Engineer ko kab bulana hai? Aaj, kal, ya parso?";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        
+        console.log(`⚠️ Clarification unclear - Retry ${callData.retries}/2`);
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
       }
 
-      callData.step = "confirm_complaint";
-      callData.lastQuestion = `Theek hai. Toh aapka complaint hai: ${callData.complaintTitle} - ${callData.complaintSubTitle}. Kya sahi hai?`;
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
+      // Try to detect complaint again with clarification
+      const secondDetected = detectComplaint(rawSpeech);
+      
+      if (secondDetected && secondDetected.score >= 3) {
+        callData.complaintTitle = secondDetected.complaint;
+        console.log(`✓ Complaint detected from clarification: ${secondDetected.complaint}`);
+        callData.step = "confirm_complaint_title";
+        callData.retries = 0;
+        callData.lastQuestion = `Theek hai, toh aapka main complaint hai: ${secondDetected.complaint}. Sahi hai na? 1 dabayein agar haan, 2 agar nahi.`;
+        askDTMF(twiml, callData.lastQuestion, 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else {
+        // Still no clear match
+        console.log("❌ No clear complaint from clarification - Using 'Other'");
+        callData.complaintTitle = "General Problem";
+        callData.complaintSubTitle = "Other";
+        callData.step = "ask_service_date";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai. Ab engineer ko kab bulana hai?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
     }
 
     // ===== ASK SUB-COMPLAINT =====
@@ -2444,87 +2493,37 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
 
-      const subResult = detectSubComplaint(callData.complaintTitle, rawSpeech);
+      if (rejectInvalid(rawSpeech)) {
+        callData.retries = (callData.retries || 0) + 1;
 
+        if (callData.retries >= 2) {
+          console.log("❌ Sub-complaint not clear - Using Other");
+          callData.complaintSubTitle = "Other";
+          callData.step = "ask_service_date";
+          callData.retries = 0;
+          callData.lastQuestion = "Theek hai. Ab engineer ke liye kaun si tarikh theek hai?";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+
+        const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
+        callData.lastQuestion = "Clear samajh nahi aaya. " + subQuestion;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      const subResult = detectSubComplaint(callData.complaintTitle, rawSpeech);
       console.log(`✓ Sub-complaint: ${subResult.subTitle} (Confidence: ${subResult.confidence})`);
 
-      if (subResult && subResult.subTitle !== "Other" && subResult.confidence > 0.3) {
-        callData.complaintSubTitle = subResult.subTitle;
-        callData.step = "confirm_complaint";
-        callData.lastQuestion = `Theek hai. Toh aapka complaint hai: ${callData.complaintTitle} - ${callData.complaintSubTitle}. Kya ye sahi hai? Press 1 for Yes, Press 2 for No.`;
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      callData.retries = (callData.retries || 0) + 1;
-
-      if (callData.retries >= 2) {
-        console.log("❌ Sub-complaint not clear - Using Other");
-        callData.complaintSubTitle = "Other";
-        callData.step = "confirm_complaint";
-        callData.lastQuestion = `Theek hai. Toh aapka complaint hai: ${callData.complaintTitle}. Kya ye sahi hai? Press 1 for Yes, Press 2 for No.`;
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
-      callData.lastQuestion = "Clear samajh nahi aaya. " + subQuestion;
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
-    // ===== CONFIRM COMPLAINT =====
-    if (callData.step === "confirm_complaint") {
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating complaint confirmation");
-        const confirmMsg = `Toh aapka complaint: ${callData.complaintTitle}. Kya sahi hai? Press 1 for Yes, Press 2 for No.`;
-        callData.lastQuestion = confirmMsg;
-        askDTMF(twiml, confirmMsg, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "1") {
-        console.log(`✓ Complaint confirmed`);
-        callData.step = "ask_service_date";
-        callData.retries = 0;
-        callData.lastQuestion = "Shukriya! Ab batayein, engineer ke liye kaun si tarikh theek hai? Date boliye - jaise: 15 february, 15/2, aaj, kal, ya parso.";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "2") {
-        console.log(`❌ Complaint not confirmed - Re-asking`);
-        callData.step = "ask_complaint";
-        callData.retries = 0;
-        callData.lastQuestion = "Theek hai. Phir se batayein, machine mein kya problem hai?";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      // If user speaks or no input, repeat question
-      callData.retries = (callData.retries || 0) + 1;
-      console.log(`⚠️ No/invalid digit for complaint confirmation - Retry ${callData.retries}/3`);
+      callData.complaintSubTitle = subResult.subTitle || "Other";
       
-      if (callData.retries >= 2) {
-        console.log("❌ No clear confirmation after 2 retries - Transferring to agent");
-        twiml.say(
-          { voice: "Polly.Aditi", language: "hi-IN" },
-          "Samajh nahi aa raha complaint kaun si hai. Aapko agent se connect kar dete hain."
-        );
-        twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-        activeCalls.delete(CallSid);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const confirmMsg = `Toh aapka complaint: ${callData.complaintTitle}. Sahi hai? Press 1 for Yes, Press 2 for No.`;
-      callData.lastQuestion = confirmMsg;
-      askDTMF(twiml, confirmMsg, 1);
+      // Move to service date
+      callData.step = "ask_service_date";
+      callData.retries = 0;
+      callData.lastQuestion = "Theek hai! Ab batayein, engineer ke liye kaun si tarikh theek hai? Date boliye - jaise: 15 february, 15/2, aaj, kal, ya parso.";
+      ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
