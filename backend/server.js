@@ -15,7 +15,7 @@ import customerRoutes from "./routes/customer.js";
 
 
 
-connectDB();
+// connectDB();
 
 const app = express();
 

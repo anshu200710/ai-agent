@@ -21,9 +21,12 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 
 const activeCalls = new Map();
 
+
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://192.168.0.134/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL = "http://192.168.0.134/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const EXTERNAL_API_BASE = "http://192.168.0.134/jcbServiceEnginerAPIv7";
+// const COMPLAINT_API_URL = "http://192.168.0.134/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 

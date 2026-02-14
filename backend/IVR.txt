@@ -1,6 +1,7 @@
 import express from "express";
 import twilio from "twilio";
 import axios from "axios";
+import Complaint from "../models/Complaint.js";
 import {
   extractPhoneNumberV2,
   extractChassisNumberV2,
@@ -1187,106 +1188,61 @@ function formatTimeToTwelveHour(timeString) {
 }
 
 async function submitComplaintToExternal(complaintData) {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 2000; // 2 seconds
-  
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log("\n" + "=".repeat(120));
-      console.log(`🌐 SUBMITTING COMPLAINT TO EXTERNAL API (Attempt ${attempt}/${MAX_RETRIES})`);
-      console.log("=".repeat(120));
-      console.log("📤 REQUEST DATA:");
-      console.log(JSON.stringify(complaintData, null, 2));
-      console.log("=".repeat(120));
+  try {
+    console.log("\n" + "=".repeat(120));
+    console.log("🌐 SUBMITTING COMPLAINT TO EXTERNAL API");
+    console.log("=".repeat(120));
+    console.log("📤 REQUEST DATA:");
+    console.log(JSON.stringify(complaintData, null, 2));
+    console.log("=".repeat(120));
 
-      const response = await axios.post(COMPLAINT_API_URL, complaintData, {
-        timeout: API_TIMEOUT,
-        headers: {
-          "Content-Type": "application/json",
-          "JCBSERVICEAPI": "MakeInJcb",
-        },
-        validateStatus: (status) => status < 500,
-        maxRedirects: 5,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
+    const response = await axios.post(COMPLAINT_API_URL, complaintData, {
+      timeout: API_TIMEOUT,
+      headers: {
+        "Content-Type": "application/json",
+        ...API_HEADERS
+      },
+      validateStatus: (status) => status < 500,
+    });
 
-      console.log("\n" + "=".repeat(120));
-      console.log("📥 API RESPONSE:");
-      console.log("=".repeat(120));
-      console.log(`Status Code: ${response.status}`);
-      console.log(`Response Data: ${JSON.stringify(response.data, null, 2)}`);
-      console.log("=".repeat(120) + "\n");
+    console.log("\n" + "=".repeat(120));
+    console.log("📥 API RESPONSE:");
+    console.log("=".repeat(120));
+    console.log(`Status Code: ${response.status}`);
+    console.log(`Response Data: ${JSON.stringify(response.data, null, 2)}`);
+    console.log("=".repeat(120) + "\n");
 
-      if (
-        response.status !== 200 ||
-        !response.data ||
-        response.data.status !== 1
-      ) {
-        console.log("⚠️ API Rejected:", response.data?.message || "Unknown error");
-        return {
-          success: false,
-          error: response.data?.message || "API rejected"
-        };
-      }
-
-      const sapId = response.data.data?.complaint_sap_id ||
-                    response.data.data?.sap_id ||
-                    null;
-
-      console.log("✅ Complaint submitted successfully. SAP ID:", sapId);
-
-      return {
-        success: true,
-        data: response.data,
-        sapId
-      };
-
-    } catch (error) {
-      const isRetryableError = error.code === 'ECONNRESET' || 
-                               error.code === 'ENOTFOUND' || 
-                               error.code === 'ETIMEDOUT' ||
-                               error.code === 'EHOSTUNREACH' ||
-                               error.code === 'ECONNREFUSED';
-      
-      console.error("\n" + "❌".repeat(60));
-      console.error(`❌ ATTEMPT ${attempt}/${MAX_RETRIES} FAILED`);
-      console.error("=".repeat(120));
-      console.error(`Error Type: ${error.code || error.name}`);
-      console.error(`Error Message: ${error.message}`);
-      console.error(`Endpoint: ${COMPLAINT_API_URL}`);
-      
-      if (error.code === 'ECONNRESET') {
-        console.error("⚠️  Connection Reset - Server closed connection unexpectedly");
-      } else if (error.code === 'ENOTFOUND') {
-        console.error("❌ Cannot reach server - Hostname not found");
-      } else if (error.code === 'ETIMEDOUT') {
-        console.error("⏱️ Network timeout - Server took too long to respond");
-      }
-      
-      // Retry if it's a connection error and we haven't exhausted retries
-      if (isRetryableError && attempt < MAX_RETRIES) {
-        console.error(`\n⏳ Retrying in ${RETRY_DELAY}ms...`);
-        console.error("=".repeat(120) + "\n");
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        continue;
-      }
-
-      // Final attempt failed
-      console.error("\n🔧 DEBUGGING STEPS:");
-      console.error("  1. Test API endpoint: curl -X POST " + COMPLAINT_API_URL);
-      console.error("  2. Check if server is reachable: ping gprs.rajeshmotors.com");
-      console.error("  3. Verify API authentication headers");
-      console.error("  4. Check firewall/proxy settings");
-      console.error("=".repeat(120) + "\n");
-      
+    if (
+      response.status !== 200 ||
+      !response.data ||
+      response.data.status !== 1
+    ) {
+      console.log("⚠️ API Rejected:", response.data?.message || "Unknown error");
       return {
         success: false,
-        error: error.message,
-        code: error.code,
-        attempts: attempt
+        error: response.data?.message || "API rejected"
       };
     }
+
+    const sapId = response.data.data?.complaint_sap_id ||
+                  response.data.data?.sap_id ||
+                  null;
+
+    console.log("✅ Complaint submitted successfully. SAP ID:", sapId);
+
+    return {
+      success: true,
+      data: response.data,
+      sapId
+    };
+
+  } catch (error) {
+    console.error("❌ Submit Error:", error.message);
+    console.error("Error Details:", error.response?.data || error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
 
@@ -1371,14 +1327,76 @@ async function saveComplaint(twiml, callData) {
 
     // Submit to external API
     const externalResult = await submitComplaintToExternal(complaintApiData);
+    let sapId = null;
 
     if (externalResult.success) {
+      sapId = externalResult.sapId;
       console.log("✅ Data successfully posted to external API");
-      return { success: true, sapId: externalResult.sapId };
     } else {
       console.log("⚠️ External API submission failed:", externalResult.error);
-      return { success: false, error: externalResult.error };
     }
+
+    const complaintDbData = {
+      machineNo: callData.chassis || "Unknown",
+      chassisNo: callData.chassis || "Unknown",
+      customerName: safeAscii(customerData.name),
+      registeredPhone: customerData.phone || "Unknown",
+      machineModel: customerData.model || "Unknown",
+      machineType: translatedMachineType,
+      machineStatus: translatedMachineStatus,
+      jobLocation: translatedJobLocation,
+      complaintGivenByName: translatedCallerName,
+      complaintGivenByPhone: callData.callerPhone || "Unknown",
+      machineInstallationDate: installationDate ? new Date(installationDate) : null,
+      description_raw: translatedComplaintDetails,
+      complaintTitle: translatedComplaintTitle,
+      complaintSubTitle: translatedComplaintSubTitle,
+      complaintSapId: sapId || null,
+      branch: branchOutlet.branch,
+      outlet: branchOutlet.outlet,
+      source: "IVR_VOICE_BOT",
+      machineLocationAddress: translatedAddress,
+      machineLocationPincode: callData.pincode || "",
+      serviceDate: callData.serviceDate || null,
+      fromTime: callData.fromTime || "",
+      toTime: callData.toTime || "",
+    };
+
+    // ===== LOG DATABASE DATA IN ENGLISH BEFORE SAVING =====
+    console.log("\n" + "=".repeat(120));
+    console.log("💾 SAVING TO DATABASE - COMPLAINT DATA IN ENGLISH");
+    console.log("=".repeat(120));
+    console.log(`🔧 Machine Number: ${complaintDbData.machineNo}`);
+    console.log(`👤 Caller Name (English): ${complaintDbData.complaintGivenByName}`);
+    console.log(`📍 Location (English): ${complaintDbData.machineLocationAddress}`);
+    console.log(`📮 Pincode: ${complaintDbData.machineLocationPincode}`);
+    console.log(`🎯 Complaint (English): ${complaintDbData.complaintTitle} → ${complaintDbData.complaintSubTitle}`);
+    console.log(`💬 Description (English): ${complaintDbData.description_raw.substring(0, 80)}...`);
+    console.log(`📅 Service Date: ${complaintDbData.serviceDate}`);
+    console.log("=".repeat(120) + "\n");
+
+    // Save to MongoDB
+    console.log("\n" + "=".repeat(120));
+    console.log("💾 SAVING COMPLAINT TO DATABASE");
+    console.log("=".repeat(120));
+    console.log("📝 DATABASE PAYLOAD:");
+    console.log(JSON.stringify(complaintDbData, null, 2));
+    console.log("=".repeat(120));
+
+    const savedComplaint = await Complaint.create(complaintDbData);
+    
+    console.log("\n" + "=".repeat(120));
+    console.log("✅ COMPLAINT SUCCESSFULLY SAVED TO DATABASE");
+    console.log("=".repeat(120));
+    console.log(`Database ID: ${savedComplaint._id}`);
+    console.log(`SAP ID: ${sapId}`);
+    console.log(`Machine: ${callData.chassis}`);
+    console.log(`Customer: ${customerData.name}`);
+    console.log(`Type: ${callData.machineType}`);
+    console.log(`Status: ${callData.machineStatus}`);
+    console.log("=".repeat(120) + "\n");
+
+    return { success: true, sapId };
 
   } catch (error) {
     console.error("\n" + "❌".repeat(60));
@@ -1411,7 +1429,7 @@ router.post("/", async (req, res) => {
 
   gather.say(
     { voice: "Polly.Aditi", language: "hi-IN" },
-    "नमस्ते! राजेश JCB मोटर्स में आपका स्वागत है। Complaint register करने के लिए एक दबाएं। अगर आप किसी agent से बात करना चाहते हैं तो दो दबाएं।"
+    "नमस्ते! राजेश JCB मोटर्स में आपका स्वागत है। कृपया हैं। आपकी कॉल दर्ज की जा रही है। Complaint register करने के लिए एक दबाएं। अगर आप किसी agent से बात करना चाहते हैं तो दो दबाएं।"
     // "Namaste! Rajesh JCB Motors mein aapka swagat hai. Complaint register karne ke liye ek dabayein. Agar aap kisi agent se baat karna chahte hain to do dabayien."
   );
 
@@ -1458,9 +1476,9 @@ router.post("/process", async (req, res) => {
       if (Digits === "1") {
         callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "कृपया अपना मशीन नंबर या फोन नंबर दर्ज करें। पूरा होने पर हैश  दबाएँ।";
+        callData.lastQuestion = "कृपया अपना मशीन नंबर या फोन नंबर बोलिए या दर्ज करें। दर्ज करते समय पूरा होने पर हैश दबाएँ।";
         const gather = twiml.gather({
-          input: "dtmf",
+          input: "dtmf speech",
           hints: "machine number, phone number, chassis, मशीन नंबर, फोन नंबर, चेसिस",
           finishOnKey: "#",
           timeout: 30,
@@ -1530,9 +1548,9 @@ router.post("/process", async (req, res) => {
         callData.step = "ask_identifier";
         callData.retries = 0;
         callData.lastAttemptedNumber = null;
-        callData.lastQuestion = "कोई बात नहीं। कृपया सही मशीन नंबर या फोन नंबर दर्ज करें। पूरा होने पर हैश (#) दबाएँ।";
+        callData.lastQuestion = "कोई बात नहीं। कृपया सही मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।";
         const gather = twiml.gather({
-          input: "dtmf",
+          input: "dtmf speech",
           hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
           finishOnKey: "#",
           timeout: 30,
@@ -1557,7 +1575,7 @@ router.post("/process", async (req, res) => {
       if (Digits === "*") {
         console.log("🔄 User pressed * - Repeating last question");
         const gather = twiml.gather({
-          input: "dtmf",
+          input: "dtmf speech",
           hints: "machine number, phone number, chassis, मशीन नंबर, फोन नंबर",
           finishOnKey: "#",
           timeout: 30,
@@ -1605,9 +1623,9 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर दर्ज करें।`;
+        callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।`;
         const gather = twiml.gather({
-          input: "dtmf",
+          input: "dtmf speech",
           hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
           finishOnKey: "#",
           timeout: 30,
@@ -1649,7 +1667,6 @@ router.post("/process", async (req, res) => {
         console.log(`✅ Using Phone: ${identifier}`);
       }
 
-      // If no valid identifier extracted from DTMF only
       if (!identifier) {
         callData.retries = (callData.retries || 0) + 1;
         console.log(`⚠️ Invalid identifier extracted - Retry ${callData.retries}/3`);
@@ -1716,9 +1733,9 @@ router.post("/process", async (req, res) => {
                 activeCalls.delete(CallSid);
                 return res.type("text/xml").send(twiml.toString());
               } else {
-                callData.lastQuestion = `कृपया मशीन नंबर दोबारा दर्ज करें, फिर हैश (#) दबाएँ। (प्रयास ${callData.retries}/2)`;
+                callData.lastQuestion = `कृपया मशीन नंबर दोबारा बोलिए या दर्ज करें, फिर हैश (#) key दबाइए। (प्रयास ${callData.retries}/2)`;
                 const gather = twiml.gather({
-                  input: "dtmf",
+                  input: "dtmf speech",
                   hints: "machine number, chassis, मशीन नंबर, चेसिस",
                   finishOnKey: "#",
                   timeout: 30,
@@ -1743,9 +1760,9 @@ router.post("/process", async (req, res) => {
         }
 
         if (!identifier) {
-          callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर दर्ज करें। पूरा होने पर हैश (#) दबाएँ।`;
+          callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।`;
           const gather = twiml.gather({
-            input: "dtmf",
+            input: "dtmf speech",
             hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
             finishOnKey: "#",
             timeout: 30,
@@ -1824,9 +1841,9 @@ router.post("/process", async (req, res) => {
         console.log("❌ Customer rejected details - Restarting identifier collection");
         callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "ठीक है। दोबारा: मशीन नंबर दर्ज करें, फिर हैश (#) दबाएँ।";
+        callData.lastQuestion = "ठीक है। दोबारा: मशीन नंबर बोलिए या दर्ज करें, फिर हैश (#) key दबाइए।";
         const gather = twiml.gather({
-          input: "dtmf",
+          input: "dtmf speech",
           hints: "machine number, chassis, मशीन नंबर, चेसिस",
           finishOnKey: "#",
           timeout: 30,
