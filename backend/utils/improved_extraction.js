@@ -264,10 +264,11 @@ export function extractTimeV3(text) {
   let isEvening = false;
   let isNight = false;
 
-  // Hindi morning indicators (4 AM - 11 AM)
-  if (/\b(सुबह|subah|morning|तड़का|तड़के|रात|रात को|आधी रात)\b/i.test(lowerText)) {
+  // Hindi morning indicators (4 AM - 12 PM) - without word boundaries for Hindi
+  if (/(सुबह|subah|morning|तड़का|तड़के)/i.test(lowerText)) {
     isMorning = true;
     isAM = true;
+    console.log(`   ✅ Morning detected (AM)`);
   }
 
   // Hindi afternoon indicators (12 PM - 5 PM) - including "duphare", "dopahar", "दुपहर"
@@ -323,7 +324,7 @@ export function extractTimeV3(text) {
       'बारह': 12, 'बाराह': 12,
       'एक': 1, 'दो': 2, 'तीन': 3, 'चार': 4,
       'पाँच': 5, 'पांच': 5, 'छः': 6, 'छह': 6,
-      'सात': 7, 'आठ': 8
+      'सात': 7, 'साथ': 7, 'आठ': 8
     };
 
     for (const [word, num] of Object.entries(hindiTimeWords)) {
