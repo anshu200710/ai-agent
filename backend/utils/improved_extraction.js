@@ -581,8 +581,8 @@ export function extractChassisNumberV2(text) {
   // Find longest sequence
   let chassis = digitSequences.reduce((a, b) => a.length >= b.length ? a : b);
   
-  // Chassis should be 6-12 digits typically
-  if (chassis.length >= 6 && chassis.length <= 12) {
+  // Chassis should be 4-7 digits
+  if (chassis.length >= 4 && chassis.length <= 7) {
     console.log(`   ✅ Chassis extracted: ${chassis}`);
     return chassis;
   }
@@ -593,8 +593,8 @@ export function extractChassisNumberV2(text) {
 
 export function isValidChassis(chassis) {
   if (!chassis) return false;
-  // Should be 6-12 digit sequence
-  return /^\d{6,12}$/.test(chassis.toString());
+  // Should be 4-7 digit sequence
+  return /^\d{4,7}$/.test(chassis.toString());
 }
 
 
