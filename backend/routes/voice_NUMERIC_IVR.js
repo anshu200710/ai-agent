@@ -1478,7 +1478,7 @@ router.post("/process", async (req, res) => {
       if (Digits === "1") {
         callData.step = "ask_identifier";
         callData.retries = 0;
-        callData.lastQuestion = "कृपया अपना 7 अंकीय मशीन नंबर दर्ज करें और फिर हैश दबाएँ। उदाहरण: 3445314 हैश।";
+        callData.lastQuestion = "कृपया अपना मशीन नंबर दर्ज करें और फिर हैश दबाएँ। उदाहरण: 3445314 हैश।";
         const gather = twiml.gather({
           input: "dtmf",
           hints: "machine number, phone number, chassis, मशीन नंबर, फोन नंबर, चेसिस",
@@ -1540,7 +1540,7 @@ router.post("/process", async (req, res) => {
         callData.isRegistered = true;
         callData.step = "ask_caller_name";
         callData.retries = 0;
-        callData.lastQuestion = "ठीक है! मशीन का रिकॉर्ड मिल गया। अब अपना पूरा नाम बताइए,";
+        callData.lastQuestion = "ठीक है! मशीन का रिकॉर्ड मिल गया";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());

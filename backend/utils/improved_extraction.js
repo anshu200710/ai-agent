@@ -315,10 +315,10 @@ export function extractTimeV3(text) {
     }
   }
 
-  // Pattern 3: Hindi number words
+  // Pattern 3: Hindi number words - ONLY match if surrounded by time-related context
   if (!timeMatch && !hour) {
     const hindiTimeWords = {
-      'नौ': 9, 'नO': 9, 'न': 9,
+      'नौ': 9, 'नO': 9,
       'दस': 10, 'दॉस': 10,
       'ग्यारह': 11, 'ग्यारा': 11,
       'बारह': 12, 'बाराह': 12,
@@ -327,12 +327,25 @@ export function extractTimeV3(text) {
       'सात': 7, 'साथ': 7, 'आठ': 8
     };
 
-    for (const [word, num] of Object.entries(hindiTimeWords)) {
-      if (lowerText.includes(word)) {
-        hour = num;
-        console.log(`   Found Hindi number: ${word} = ${hour}`);
-        break;
+    // Check for ACTUAL time-related context (NOT just prepositions like "में")
+    const timeContext = /बजे|baje|बज|o'clock|oclock|am|pm|a\.m|p\.m|morning|afternoon|evening|night|सुबह|दोपहर|शाम|रात|घंटा|घंटे/i.test(lowerText);
+    
+    // ONLY extract Hindi digits if actual time context is present
+    if (timeContext) {
+      for (const [word, num] of Object.entries(hindiTimeWords)) {
+        const regex = new RegExp(`\\b${word}\\b`, 'i');
+        if (regex.test(lowerText)) {
+          // Double-check: digit must be near "बजे", "घंटा", or AM/PM
+          const nearTimeWord = new RegExp(`${word}\\s*(बजे|baje|बज|घंटे|घंटा|o'clock|oclock|am|pm|a\\.m|p\\.m)`, 'i');
+          if (nearTimeWord.test(lowerText)) {
+            hour = num;
+            console.log(`   Found Hindi number: ${word} = ${hour} (with time context)`);
+            break;
+          }
+        }
       }
+    } else {
+      console.log(`   ⚠️ Hindi digits would match but NO real time context found - rejecting (likely year/date)`);
     }
   }
 
