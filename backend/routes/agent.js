@@ -460,19 +460,53 @@ function extractServiceDate(text) {
     return dayAfter;
   }
 
-  const months = {
+  // Hindi month names
+  const hindiMonths = {
+    'जनवरी': 1, 'फरवरी': 2, 'मार्च': 3, 'अप्रैल': 4, 'मई': 5, 'जून': 6,
+    'जुलाई': 7, 'अगस्त': 8, 'सितंबर': 9, 'अक्टूबर': 10, 'नवंबर': 11, 'दिसंबर': 12
+  };
+
+  // English month names
+  const englishMonths = {
     'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
     'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6, 'july': 7, 'jul': 7,
     'august': 8, 'aug': 8, 'september': 9, 'sep': 9, 'october': 10, 'oct': 10,
     'november': 11, 'nov': 11, 'december': 12, 'dec': 12
   };
 
+  // Try DD/MM or DD-MM format
   const dateMatch1 = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})/);
   if (dateMatch1) {
     const day = parseInt(dateMatch1[1]);
     const month = parseInt(dateMatch1[2]);
     if (month >= 1 && month <= 12) {
       const date = new Date(today.getFullYear(), month - 1, day);
+      if (date >= today) return date;
+      date.setFullYear(today.getFullYear() + 1);
+      return date;
+    }
+  }
+
+  // Try Hindi format: "20 फरवरी" or "20 फरवरी को"
+  for (const [hindiMonth, monthNum] of Object.entries(hindiMonths)) {
+    const hindiDateRegex = new RegExp(`(\\d{1,2})\\s+${hindiMonth}`, 'i');
+    const hindiMatch = cleaned.match(hindiDateRegex);
+    if (hindiMatch) {
+      const day = parseInt(hindiMatch[1]);
+      const date = new Date(today.getFullYear(), monthNum - 1, day);
+      if (date >= today) return date;
+      date.setFullYear(today.getFullYear() + 1);
+      return date;
+    }
+  }
+
+  // Try English format: "20 February" or "20 Feb"
+  for (const [englishMonth, monthNum] of Object.entries(englishMonths)) {
+    const englishDateRegex = new RegExp(`(\\d{1,2})\\s+${englishMonth}`, 'i');
+    const englishMatch = cleaned.match(englishDateRegex);
+    if (englishMatch) {
+      const day = parseInt(englishMatch[1]);
+      const date = new Date(today.getFullYear(), monthNum - 1, day);
       if (date >= today) return date;
       date.setFullYear(today.getFullYear() + 1);
       return date;
@@ -505,6 +539,24 @@ function formatTimeToTwelveHour(timeString) {
   const period = hour >= 12 ? 'PM' : 'AM';
   
   return `${String(displayHour).padStart(2, '0')}:${minute} ${period}`;
+}
+
+/* ======================= CITY TO BRANCH/OUTLET MAPPING ======================= */
+const cityBranchOutletMap = {
+  "SUJANGARH": { branch: "SUJANGARH", outlet: "MAIN" },
+  "JAIPUR": { branch: "JAIPUR", outlet: "HQ" },
+  "UDAIPUR": { branch: "UDAIPUR", outlet: "MAIN" },
+  "JODHPUR": { branch: "JODHPUR", outlet: "MAIN" },
+  "KOTA": { branch: "KOTA", outlet: "MAIN" },
+  "AJMER": { branch: "AJMER", outlet: "MAIN" },
+  "BIKANER": { branch: "BIKANER", outlet: "MAIN" },
+  "DEFAULT": { branch: "CENTRAL", outlet: "SERVICE" }
+};
+
+function getBranchOutletByCity(city) {
+  if (!city) return cityBranchOutletMap["DEFAULT"];
+  const cityUpper = city.toUpperCase().trim();
+  return cityBranchOutletMap[cityUpper] || cityBranchOutletMap["DEFAULT"];
 }
 
 function askDTMF(twiml, text, numDigits = 1) {
@@ -724,7 +776,7 @@ router.post("/process", async (req, res) => {
       if (Digits === "1") {
         callData.step = "ask_chassis";
         callData.retries = 0;
-        callData.lastQuestion = "कृपया अपना 4 से 7 अंकीय मशीन नंबर दर्ज करें और # दबाएँ। ";
+        callData.lastQuestion = "कृपया अपना मशीन नंबर दर्ज करें और # दबाएँ। ";
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -781,7 +833,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `दोबारा 4 से 7 अंकीय मशीन नंबर दर्ज करें और # दबाएँ।`;
+        callData.lastQuestion = `दोबारा मशीन नंबर दर्ज करें और # दबाएँ।`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -815,7 +867,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `दोबारा नंबर दर्ज करें।`;
+        callData.lastQuestion = `दोबारा मशीन नंबर दर्ज करें।`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -868,6 +920,8 @@ router.post("/process", async (req, res) => {
       callData.step = "ask_complaint_category";
       callData.retries = 0;
       callData.lastQuestion = `नमस्ते। आपकी मशीन का रिकॉर्ड मिल गया है।
+सुविधा के लिए: किसी भी सवाल को फिर से सुनने के लिए star का बटन दबाएँ।
+
 कृपया समस्या की श्रेणी चुनें।
 
 इंजन या ट्रांसमिशन के लिए 1 दबाएँ।
@@ -906,7 +960,7 @@ router.post("/process", async (req, res) => {
         // Go back to chassis number
         callData.step = "ask_chassis";
         callData.retries = 0;
-        callData.lastQuestion = "नमस्ते! अपनी JCB मशीन का नंबर डालिए, फिर हैश (#) दबाइए।";
+        callData.lastQuestion = "नमस्ते! अपनी JCB मशीन का नंबर डालिए, फिर हैश दबाइए।";
         askDTMF(twiml, callData.lastQuestion, 7);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -935,12 +989,37 @@ router.post("/process", async (req, res) => {
       }
 
       callData.selectedCategory = Digits;
-      callData.step = "ask_sub_complaint_type";
+      callData.step = "confirm_category";
       callData.retries = 0;
 
-      // Check if category is "8 = Other" which has sub-categories
-      if (Digits === "8") {
-        const otherMenu = `अन्य समस्याओं में से कौन सी है? कृपया अपनी समस्या चुनें:
+      const category = complaintCategories[Digits];
+      const categoryName = category.titleHindi;
+      
+      callData.lastQuestion = `आपने चुना: ${categoryName}। क्या यह सही है? हाँ के लिए 1 दबाएँ, नहीं के लिए 2 दबाएँ।`;
+      askDTMF(twiml, callData.lastQuestion, 1);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    /* ===== CONFIRM CATEGORY ===== */
+    if (callData.step === "confirm_category") {
+      if (Digits === "*") {
+        const category = complaintCategories[callData.selectedCategory];
+        const categoryName = category.titleHindi;
+        callData.lastQuestion = `आपने चुना: ${categoryName}। क्या यह सही है? हाँ के लिए 1 दबाएँ, नहीं के लिए 2 दबाएँ।`;
+        askDTMF(twiml, callData.lastQuestion, 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (Digits === "1") {
+        // User confirmed category - proceed to sub-complaint selection
+        callData.step = "ask_sub_complaint_type";
+        callData.retries = 0;
+
+        // Check if category is "8 = Other" which has sub-categories
+        if (callData.selectedCategory === "8") {
+          const otherMenu = `अन्य समस्याओं में से कौन सी है? कृपया अपनी समस्या चुनें:
 केबिन और ऑपरेटर सुविधा के लिए 1 दबाएँ।
 कूलिंग सिस्टम विफलता के लिए 2 दबाएँ।
 ईंधन प्रणाली समस्याएं के लिए 3 दबाएँ।
@@ -950,22 +1029,79 @@ router.post("/process", async (req, res) => {
 सुरक्षा और चेतावनी प्रणाली के लिए 7 दबाएँ।
 इंजन प्रबंधन और उत्सर्जन के लिए 8 दबाएँ।
 पिछला सवाल के लिए 9 दबाएँ।`;
-        callData.lastQuestion = otherMenu;
-        askDTMF(twiml, otherMenu, 1);
+          callData.lastQuestion = otherMenu;
+          askDTMF(twiml, otherMenu, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+
+        const category = complaintCategories[callData.selectedCategory];
+        const categoryName = category.titleHindi;
+        const subOptions = Object.entries(category.subComplaints)
+          .map(([digit, complaint]) => `${complaint.titleHindi} के लिए ${digit} दबाएँ।`)
+          .join("\n");
+        
+        callData.lastQuestion = `${categoryName} की कौन सी समस्या है? कृपया अपनी समस्या चुनें:\n${subOptions}`;
+        askDTMF(twiml, callData.lastQuestion, 1);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
-      }
+      } else if (Digits === "2") {
+        // User rejected - go back to category selection
+        callData.step = "ask_complaint_category";
+        callData.retries = 0;
+        callData.lastQuestion = `कृपया फिर से समस्या की श्रेणी चुनें:
+इंजन या ट्रांसमिशन के लिए 1 दबाएँ।
+हाइड्रोलिक सिस्टम के लिए 2 दबाएँ।
+सिलिंडर या सील के लिए 3 दबाएँ।
+बिजली या बैटरी के लिए 4 दबाएँ।
+बॉडी या संरचना के लिए 5 दबाएँ।
+टायर या अंडरकैरेज के लिए 6 दबाएँ।
+सेवा या रखरखाव के लिए 7 दबाएँ।
+अन्य समस्या के लिए 8 दबाएँ।`;
+        askDTMF(twiml, callData.lastQuestion, 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          // Default to "Yes" after 2 retries
+          callData.step = "ask_sub_complaint_type";
+          callData.retries = 0;
 
-      const category = complaintCategories[Digits];
-      const categoryName = category.titleHindi;
-      const subOptions = Object.entries(category.subComplaints)
-        .map(([digit, complaint]) => `${complaint.titleHindi} के लिए ${digit} दबाएँ।`)
-        .join("\n");
-      
-      callData.lastQuestion = `${categoryName} की कौन सी समस्या है? कृपया अपनी समस्या चुनें:\n${subOptions}`;
-      askDTMF(twiml, callData.lastQuestion, 1);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
+          if (callData.selectedCategory === "8") {
+            const otherMenu = `अन्य समस्याओं में से कौन सी है? कृपया अपनी समस्या चुनें:
+केबिन और ऑपरेटर सुविधा के लिए 1 दबाएँ।
+कूलिंग सिस्टम विफलता के लिए 2 दबाएँ।
+ईंधन प्रणाली समस्याएं के लिए 3 दबाएँ।
+होज़ और पाइप क्षति के लिए 4 दबाएँ।
+अटैचमेंट समस्याएं के लिए 5 दबाएँ।
+स्टीयरिंग और नियंत्रण समस्याएं के लिए 6 दबाएँ।
+सुरक्षा और चेतावनी प्रणाली के लिए 7 दबाएँ।
+इंजन प्रबंधन और उत्सर्जन के लिए 8 दबाएँ।
+पिछला सवाल के लिए 9 दबाएँ।`;
+            callData.lastQuestion = otherMenu;
+            askDTMF(twiml, otherMenu, 1);
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          }
+
+          const category = complaintCategories[callData.selectedCategory];
+          const categoryName = category.titleHindi;
+          const subOptions = Object.entries(category.subComplaints)
+            .map(([digit, complaint]) => `${complaint.titleHindi} के लिए ${digit} दबाएँ।`)
+            .join("\n");
+          
+          callData.lastQuestion = `${categoryName} की कौन सी समस्या है? कृपया अपनी समस्या चुनें:\n${subOptions}`;
+          askDTMF(twiml, callData.lastQuestion, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        } else {
+          callData.lastQuestion = `कृपया 1 (हाँ) या 2 (नहीं) दबाएँ।`;
+          askDTMF(twiml, callData.lastQuestion, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      }
     }
 
     /* ===== STEP 5: ASK SUB-COMPLAINT TYPE (NUMERIC MENU) ===== */
@@ -1062,11 +1198,11 @@ router.post("/process", async (req, res) => {
       console.log(`✓ Selected Category: ${complaintCategories[callData.selectedCategory].title}`);
       console.log(`✓ Selected Sub-Complaint: ${complaintInfo.complaintTitle}`);
 
-      /* ===== NEXT STEP: ASK SERVICE DATE ===== */
-      callData.step = "ask_service_date";
+      /* ===== NEXT STEP: CONFIRM COMPLAINT ===== */
+      callData.step = "confirm_complaint";
       callData.retries = 0;
-      callData.lastQuestion = `बहुत अच्छा! आपकी समस्या दर्ज हो गई - ${complaintInfo.complaintTitle}। अब बताइए, इंजीनियर कब आ सकता है? तारीख बोलिए: आज, कल, परसों, या विशिष्ट तारीख जैसे 15 फरवरी।`;
-      ask(twiml, callData.lastQuestion);
+      callData.lastQuestion = `आपकी समस्या: ${complaintInfo.complaintTitle}। क्या यह सही है? हाँ के लिए 1 दबाएँ, नहीं के लिए 2 दबाएँ।`;
+      askDTMF(twiml, callData.lastQuestion, 1);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -1136,23 +1272,106 @@ router.post("/process", async (req, res) => {
       console.log(`✓ Selected Other Category: ${otherCategory.title}`);
       console.log(`✓ Selected Final Complaint: ${selectedOption.title}`);
 
-      /* ===== NEXT STEP: ASK SERVICE DATE ===== */
-      callData.step = "ask_service_date";
+      /* ===== NEXT STEP: CONFIRM COMPLAINT ===== */
+      callData.step = "confirm_complaint";
       callData.retries = 0;
-      callData.lastQuestion = `बहुत अच्छा! आपकी समस्या दर्ज हो गई - ${selectedOption.title}। अब बताइए, इंजीनियर कब आ सकता है? तारीख बोलिए: आज, कल, परसों, या विशिष्ट तारीख जैसे 15 फरवरी।`;
-      ask(twiml, callData.lastQuestion);
+      callData.lastQuestion = `आपकी समस्या: ${selectedOption.title}। क्या यह सही है? हाँ के लिए 1 दबाएँ, नहीं के लिए 2 दबाएँ।`;
+      askDTMF(twiml, callData.lastQuestion, 1);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
+    /* ===== CONFIRM COMPLAINT ===== */
+    if (callData.step === "confirm_complaint") {
+      if (Digits === "*") {
+        askDTMF(twiml, callData.lastQuestion, 1);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (Digits === "1") {
+        // User confirmed - proceed to service date
+        callData.step = "ask_service_date";
+        callData.retries = 0;
+        callData.lastQuestion = `धन्यवाद! अब बताइए, इंजीनियर कब आ सकता है? तारीख बोलिए: जैसे 20 फरवरी।`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else if (Digits === "2") {
+        // User rejected - go back to sub-complaint selection
+        if (callData.selectedCategory === "8") {
+          // Go back to Other sub-type selection
+          callData.step = "ask_other_sub_type";
+          callData.retries = 0;
+          const otherCategory = complaintCategories["8"].subComplaints[callData.selectedOtherCategory];
+          const otherCategoryName = otherCategory.titleHindi;
+          const otherOptions = Object.entries(otherCategory.options)
+            .map(([digit, option]) => `${option.titleHindi} के लिए ${digit} दबाएँ।`)
+            .join("\n");
+          callData.lastQuestion = `${otherCategoryName} में कौन सी विशिष्ट समस्या है? कृपया चुनें:\n${otherOptions}`;
+          askDTMF(twiml, callData.lastQuestion, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        } else {
+          // Go back to regular sub-complaint selection
+          callData.step = "ask_sub_complaint_type";
+          callData.retries = 0;
+          const categoryName = complaintCategories[callData.selectedCategory].titleHindi;
+          const subMenu = getSubComplaintMenu(callData.selectedCategory);
+          callData.lastQuestion = `कृपया फिर से चुनें: ${subMenu}`;
+          askDTMF(twiml, callData.lastQuestion, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      } else {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          // Default to "Yes" after 2 retries
+          callData.step = "ask_service_date";
+          callData.retries = 0;
+          callData.lastQuestion = `धन्यवाद! अब बताइए, इंजीनियर कब आ सकता है? तारीख बोलिए: आज, कल, परसों, या विशिष्ट तारीख जैसे 15 फरवरी।`;
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        } else {
+          callData.lastQuestion = `कृपया 1 (हाँ) या 2 (नहीं) दबाएँ।`;
+          askDTMF(twiml, callData.lastQuestion, 1);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      }
+    }
 
     if (callData.step === "ask_service_date") {
-      // Skip date extraction - use default next day
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      callData.serviceDate = tomorrow;
-      console.log(`✓ Service Date (Default): ${tomorrow.toDateString()}`);
-      
+      if (Digits === "*") {
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Try to extract the date from speech
+      const extractedDate = extractServiceDate(rawSpeech);
+
+      if (!extractedDate) {
+        callData.retries = (callData.retries || 0) + 1;
+
+        if (callData.retries >= 2) {
+          // Use default (next day) after 2 retries
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          callData.serviceDate = tomorrow;
+          console.log(`✓ Service Date (Default after retries): ${tomorrow.toDateString()}`);
+        } else {
+          callData.lastQuestion = "कृपया service date फिर से बताइए। जैसे: आज, कल, परसों, या 20 फरवरी।";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      } else {
+        callData.serviceDate = extractedDate;
+        console.log(`✓ Service Date Extracted: ${extractedDate.toDateString()}`);
+      }
+
       callData.step = "ask_from_time";
       callData.retries = 0;
       callData.lastQuestion = "धन्यवाद! अब बताइए, इंजीनियर किस समय आ सकता है? समय बोलिए: सुबह 9 बजे, दोपहर 2 बजे, शाम 5 बजे, आदि।";
@@ -1227,64 +1446,9 @@ router.post("/process", async (req, res) => {
         }
       }
 
-      callData.step = "ask_caller_name";
-      callData.retries = 0;
-      callData.lastQuestion = "धन्यवाद। अब बताइए, आपका नाम क्या है? जिस नाम पर complaint दर्ज करना है।";
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
-    /* ===== ASK CALLER NAME (COMPLAINT GIVEN BY) ===== */
-    if (callData.step === "ask_caller_name") {
-      if (Digits === "*") {
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (rejectInvalid(rawSpeech)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.callerName = callData.customerData?.name || "Unknown";
-          callData.step = "ask_machine_address";
-          callData.retries = 0;
-          callData.lastQuestion = "धन्यवाद। अब बताइए, मशीन का सटीक पता / एड्रेस क्या है? जैसे: प्लॉट नंबर, गली, मोहल्ला, आदि।";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "कृपया अपना नाम बोलिए।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const callerName = extractNameV2(rawSpeech);
-
-      if (!callerName || !isValidName(callerName)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.callerName = callData.customerData?.name || "Unknown";
-          callData.step = "ask_machine_address";
-          callData.retries = 0;
-          callData.lastQuestion = "धन्यवाद। अब बताइए, मशीन का सटीक पता / एड्रेस क्या है?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "कृपया सही नाम बोलिए।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      console.log(`✓ Caller Name: ${callerName}`);
-      callData.callerName = callerName;
+      // Skip caller name - use phone number from $callData.from
+      callData.callerName = callData.from || "Unknown";
+      console.log(`✓ Contact Person Phone: ${callData.from}`);
       
       callData.step = "ask_machine_address";
       callData.retries = 0;
@@ -1406,6 +1570,10 @@ router.post("/process", async (req, res) => {
       console.log(`✓ Pincode: ${pincode}`);
       callData.pincode = pincode;
       callData.city = callData.city || "Unknown";
+      
+      // Merge address and pincode into location field
+      callData.location = `${callData.machineAddress} - ${pincode}`;
+      console.log(`✓ Location (merged): ${callData.location}`);
 
       /* ===== SUBMIT COMPLAINT ===== */
       callData.step = "submit_complaint";
@@ -1428,12 +1596,15 @@ router.post("/process", async (req, res) => {
 /* ===== HELPER: SUBMIT COMPLAINT ===== */
 async function handleComplaintSubmission(CallSid, twiml, res, callData) {
   try {
+    // Get branch and outlet based on city
+    const branchOutlet = getBranchOutletByCity(callData.city || "Unknown");
+
     const complaintData = {
       machine_no: callData.chassis || "Unknown",
       customer_name: safeAscii(callData.customerData?.name || "Unknown"),
-      caller_name: safeAscii(callData.callerName || "Unknown"),
+      caller_name: safeAscii(callData.from || "Unknown"),
       caller_no: callData.from || callData.customerData?.phone || "Unknown",
-      contact_person: safeAscii(callData.callerName || callData.customerData?.name || "Unknown"),
+      contact_person: safeAscii(callData.from || "Unknown"),
       contact_person_number: callData.from || callData.customerData?.phone || "Unknown",
       machine_model: callData.customerData?.machineType || "Unknown",
       sub_model: callData.customerData?.model || "NA",
@@ -1443,23 +1614,23 @@ async function handleComplaintSubmission(CallSid, twiml, res, callData) {
       complain_by: "Customer",
       machine_status: callData.machineStatus || "Running With Problem",
       job_location: callData.jobLocation || "Onsite",
-      branch: "NA",
-      outlet: "NA",
+      branch: branchOutlet.branch,
+      outlet: branchOutlet.outlet,
       complaint_details: callData.rawComplaint || callData.complaintTitle || "Not provided",
       complaint_title: callData.complaintTitle || "General Problem",
       sub_title: callData.complaintSubTitle || "Other",
       business_partner_code: callData.customerData?.businessPartnerCode || "NA",
       complaint_sap_id: "NA",
-      machine_location: callData.pincode || "000000",
+      machine_location: callData.location || callData.pincode || "000000",
       service_date: formatDate(callData.serviceDate) || "",
       from_time: formatTimeToTwelveHour(callData.fromTime) || "",
       to_time: formatTimeToTwelveHour(callData.toTime) || "",
-      job_close_lat: "0.000000",
-      job_close_lng: "0.000000",
-      job_open_lat: "0.000000",
-      job_open_lng: "0.000000",
-      job_close_address: safeAscii(callData.machineAddress || ""),
-      job_open_address: safeAscii(callData.machineAddress || ""),
+      job_close_lat: callData.customerData?.machine_latitude || "0.000000",
+      job_close_lng: callData.customerData?.machine_longitude || "0.000000",
+      job_open_lat: callData.customerData?.machine_latitude || "0.000000",
+      job_open_lng: callData.customerData?.machine_longitude || "0.000000",
+      job_close_address: safeAscii(callData.location || callData.machineAddress || ""),
+      job_open_address: safeAscii(callData.location || callData.machineAddress || ""),
       job_close_city: callData.city || "Unknown",
       job_open_city: callData.city || "Unknown",
     };
@@ -1468,13 +1639,14 @@ async function handleComplaintSubmission(CallSid, twiml, res, callData) {
     console.log("📤 SUBMITTING COMPLAINT");
     console.log("=".repeat(120));
     console.log(`🔧 Chassis: ${callData.chassis}`);
-    console.log(`👤 Caller Name: ${callData.callerName}`);
+    console.log(`👤 Contact Person Phone: ${callData.from}`);
     console.log(`🎯 Complaint: ${callData.complaintTitle} → ${callData.complaintSubTitle}`);
     console.log(`📅 Date: ${formatDate(callData.serviceDate)}`);
     console.log(`⏰ Time: ${callData.fromTime} - ${callData.toTime}`);
     console.log(`📍 Location: ${callData.jobLocation}`);
-    console.log(`🏠 Address: ${callData.machineAddress}`);
-    console.log(`📌 Pincode: ${callData.pincode}`);
+    console.log(`🏠 Address & Pincode: ${callData.location}`);
+    console.log(`🏢 Branch: ${branchOutlet.branch}, Outlet: ${branchOutlet.outlet}`);
+    console.log(`📌 City: ${callData.city}`);
     console.log("=".repeat(120) + "\n");
 
     const result = await submitComplaintToExternal(complaintData);
