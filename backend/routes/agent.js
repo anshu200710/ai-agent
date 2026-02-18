@@ -21,8 +21,10 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+// const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://192.168.1.40/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://192.168.1.40/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -359,9 +361,75 @@ function cleanSpeech(text) {
   return text.toLowerCase().replace(/[।.,!?]/g, "").replace(/\s+/g, " ").trim();
 }
 
+function convertHindiToEnglish(text) {
+  if (!text || typeof text !== 'string') return "Unknown";
+  
+  // Hindi to English mapping for common locations and words
+  const hindiToEnglishMap = {
+    // Major Indian Cities
+    'दिल्ली': 'Delhi',
+    'मुंबई': 'Mumbai',
+    'बेंगलुरु': 'Bangalore',
+    'चेन्नई': 'Chennai',
+    'कोलकाता': 'Kolkata',
+    'हैदराबाद': 'Hyderabad',
+    'पुणे': 'Pune',
+    'अहमदाबाद': 'Ahmedabad',
+    // Rajasthan Cities
+    'अजमेर': 'Ajmer',
+    'अलवर': 'Alwar',
+    'जयपुर': 'Jaipur',
+    'कोटा': 'Kota',
+    'उदयपुर': 'Udaipur',
+    'जोधपुर': 'Jodhpur',
+    'बीकानेर': 'Bikaner',
+    'भरतपुर': 'Bharatpur',
+    // Delhi Areas
+    'करोल बाग': 'Karol Bagh',
+    'करोल': 'Karol',
+    'बाग': 'Bagh',
+    'गुड़गांव': 'Gurgaon',
+    'नोएडा': 'Noida',
+    'साकेत': 'Saket',
+    'द्वारका': 'Dwarka',
+    'गुलाब': 'Gulab',
+    // Landmarks
+    'बस अड्डा': 'Bus Station',
+    'स्कूल': 'School',
+    'अस्पताल': 'Hospital',
+    'बैंक': 'Bank',
+    'मोहल्ला': 'Locality',
+    'मार्केट': 'Market',
+    'गली': 'Lane',
+    'प्लॉट': 'Plot',
+    'नजदीक': 'Near',
+    'पास': 'Near',
+    // Common words
+    'पता नहीं': 'Not Provided',
+    'नहीं': 'No',
+    'हाँ': 'Yes',
+  };
+  
+  let converted = text;
+  
+  // Sort by length (longest first) to match longer phrases first
+  const sortedMap = Object.entries(hindiToEnglishMap).sort((a, b) => b[0].length - a[0].length);
+  
+  for (const [hindi, english] of sortedMap) {
+    const regex = new RegExp(`\\b${hindi}\\b`, 'gi');
+    converted = converted.replace(regex, english);
+  }
+  
+  return converted || "Unknown";
+}
+
 function safeAscii(text) {
   if (!text) return "Unknown";
-  return text.replace(/[^\w\s-]/g, '').trim() || "Unknown";
+  // Convert Hindi to English first
+  const englishText = convertHindiToEnglish(text);
+  // Then keep only ASCII-compatible characters
+  const cleaned = englishText.replace(/[^\w\s-]/g, '').trim();
+  return cleaned || "Unknown";
 }
 
 function isUncertain(text) {
@@ -640,6 +708,8 @@ async function fetchCustomerFromExternal({ phone, chassisNo }) {
       subModel: customerData.sub_model || "NA",
       machineType: customerData.machine_type || "Unknown",
       businessPartnerCode: customerData.business_partner_code || "NA",
+      machine_latitude: customerData.machine_latitude || "0.000000",
+      machine_longitude: customerData.machine_longitude || "0.000000",
     };
 
     console.log("✅ Customer data fetched successfully");
@@ -776,7 +846,7 @@ router.post("/process", async (req, res) => {
       if (Digits === "1") {
         callData.step = "ask_chassis";
         callData.retries = 0;
-        callData.lastQuestion = "कृपया अपना मशीन नंबर दर्ज करें और # दबाएँ। ";
+        callData.lastQuestion = "कृपया अपना मशीन नंबर दर्ज करें और # दबाएँ।";
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -833,7 +903,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `दोबारा मशीन नंबर दर्ज करें और # दबाएँ।`;
+        callData.lastQuestion = `दोबारा machine number धीरे धीरे नंबर दर्ज करें और # दबाएँ।`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -867,7 +937,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
 
-        callData.lastQuestion = `दोबारा मशीन नंबर दर्ज करें।`;
+        callData.lastQuestion = `दोबारा मशीन नंबर धीरे धीरे दर्ज करें और # दबाएँ।`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -900,7 +970,7 @@ router.post("/process", async (req, res) => {
         }
 
         callData.step = "ask_chassis";
-        callData.lastQuestion = `दोबारा मशीन नंबर दर्ज करें और # दबाएँ`;
+        callData.lastQuestion = `दोबारा मशीन नंबर धीरे धीरे दर्ज करें और # दबाएँ`;
         const gather = twiml.gather({
           input: "dtmf",
           finishOnKey: "#",
@@ -1372,10 +1442,52 @@ router.post("/process", async (req, res) => {
         console.log(`✓ Service Date Extracted: ${extractedDate.toDateString()}`);
       }
 
-      callData.step = "ask_from_time";
+      // Move to confirmation step
+      callData.step = "confirm_service_date";
       callData.retries = 0;
-      callData.lastQuestion = "धन्यवाद! अब बताइए, इंजीनियर किस समय आ सकता है? समय बोलिए: सुबह 9 बजे, दोपहर 2 बजे, शाम 5 बजे, आदि।";
+      const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      const formattedDate = callData.serviceDate.toLocaleDateString('hi-IN', dateOptions);
+      callData.lastQuestion = `आपने date चुनी है: ${formattedDate}। क्या यह सही है? सही के लिए 1, गलत के लिए 2।`;
       ask(twiml, callData.lastQuestion);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    /* ===== CONFIRM SERVICE DATE ===== */
+    if (callData.step === "confirm_service_date") {
+      if (Digits === "*") {
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const formattedDate = callData.serviceDate.toLocaleDateString('hi-IN', dateOptions);
+        const msg = `आपने date चुनी है: ${formattedDate}। क्या यह सही है? सही के लिए 1, गलत के लिए 2।`;
+        ask(twiml, msg);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (Digits === "1") {
+        // Confirmed - move to next step
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const formattedDate = callData.serviceDate.toLocaleDateString('hi-IN', dateOptions);
+        console.log(`✓ Service Date Confirmed: ${formattedDate}`);
+        
+        callData.step = "ask_from_time";
+        callData.retries = 0;
+        callData.lastQuestion = "धन्यवाद! अब बताइए, इंजीनियर किस समय आ सकता है? समय बोलिए: सुबह 9 बजे, दोपहर 2 बजे, शाम 5 बजे, आदि।";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      } else if (Digits === "2") {
+        // Not confirmed - ask again
+        callData.step = "ask_service_date";
+        callData.retries = 0;
+        callData.lastQuestion = "कृपया दोबारा service date बताइए। जैसे: आज, कल, परसों, या 20 फरवरी।";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Invalid input
+      ask(twiml, `कृपया 1 (हाँ) या 2 (नहीं) दबाएँ।`);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -1508,8 +1620,11 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
 
-      console.log(`✓ Machine Address: ${machineAddress}`);
-      callData.machineAddress = machineAddress;
+      // Convert address to English before storing
+      const englishAddress = safeAscii(machineAddress);
+      console.log(`✓ Machine Address (Hindi): ${machineAddress}`);
+      console.log(`✓ Machine Address (English): ${englishAddress}`);
+      callData.machineAddress = englishAddress;
       callData.city = callData.customerData?.city || "Unknown";
       
       callData.step = "ask_pincode";
@@ -1583,7 +1698,6 @@ router.post("/process", async (req, res) => {
 
     activeCalls.set(CallSid, callData);
     res.type("text/xml").send(twiml.toString());
-
   } catch (error) {
     console.error("❌ Call Processing Error:", error);
     const twiml = new VoiceResponse();
