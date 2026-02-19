@@ -21,6 +21,37 @@ const COMPLAINT_API_URL = "http://192.168.1.92/jcbServiceEnginerAPIv7/ai_call_co
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
+/* ======================= SERVICE CENTER LOCATIONS DATABASE ======================= */
+const SERVICE_CENTERS = [
+  { id: 1, city_name: "AJMER", branch_name: "AJMER", branch_code: "1", lat: 26.434888840, lng: 74.698112488, city_add: "F-100, Road No. 5, Riico Industrial Area, Near Power House, Palra, Ajmer", is_active: 1 },
+  { id: 2, city_name: "ALWAR", branch_name: "ALWAR", branch_code: "2", lat: 27.582258224, lng: 76.647377014, city_add: "Khasra no. 2345, Tuleda Bye Pass, Alwar Bhiwadi Highway Alwar-301001", is_active: 1 },
+  { id: 3, city_name: "BANSWARA", branch_name: "UDAIPUR", branch_code: "7", lat: 23.563598633, lng: 74.417541504, city_add: "Near Nayak Hotel, Udaipur - Dungarpur Link Road, Banswara-327001", is_active: 1 },
+  { id: 4, city_name: "BHARATPUR", branch_name: "ALWAR", branch_code: "2", lat: 27.201648712, lng: 77.462951660, city_add: "Kurka house,Sewar road,Near Jain Mandir,Bharatpur (Raj.)", is_active: 1 },
+  { id: 5, city_name: "BHILWARA", branch_name: "BHILWARA", branch_code: "3", lat: 25.374652863, lng: 74.623023987, city_add: "Kundan Complex, Sukhadiya Circle, Near Bewar Booking, Ajmer Road, Bhilwara", is_active: 1 },
+  { id: 6, city_name: "BHIWADI", branch_name: "ALWAR", branch_code: "2", lat: 28.202623367, lng: 76.808448792, city_add: "Rajesh Motors (Raj.) Pvt. Ltd.,  Near Hutch Tower, Alwar Bye pass road, Bhiwadi, Distt. Alwar, (Raj.)", is_active: 1 },
+  { id: 7, city_name: "DAUSA", branch_name: "JAIPUR", branch_code: "4", lat: 26.905101776, lng: 76.370185852, city_add: "Opp. Anand Goods transport co.Near Saras  Dairy Plant,  Agra By Pass, N.H-11,  Dausa -303303", is_active: 1 },
+  { id: 8, city_name: "DHOLPUR", branch_name: "ALWAR", branch_code: "2", lat: 26.693515778, lng: 77.876922607, city_add: "Bharatpur Road, Layania Marriage Home, Dholpur", is_active: 1 },
+  { id: 9, city_name: "DUNGARPUR", branch_name: "UDAIPUR", branch_code: "7", lat: 23.844612122, lng: 73.737922668, city_add: "T.P.Complex Shopno 1-2 Nr. Reliance Petrol Pump , Sagwara Road, Dunagarpur", is_active: 1 },
+  { id: 10, city_name: "GONER ROAD", branch_name: "JAIPUR", branch_code: "4", lat: 26.889762878, lng: 75.873939514, city_add: "72, Goner Turn, Agra Road, Jaipur-302004, Rajasthan.", is_active: 1 },
+  { id: 11, city_name: "JAIPUR", branch_name: "JAIPUR", branch_code: "4", lat: 26.865495682, lng: 75.681541443, city_add: "Khasra No. 1170-1175, Near Delhi Public School, Bhankrota, Ajmer Road, Jaipur, Rajasthan - 302026", is_active: 1 },
+  { id: 12, city_name: "JHALAWAR", branch_name: "KOTA", branch_code: "5", lat: 24.547901154, lng: 76.194129944, city_add: "Opp. Roop Nagar Colony, Kota Road, Jhalawar", is_active: 1 },
+  { id: 13, city_name: "JHUNJHUNU", branch_name: "SIKAR", branch_code: "6", lat: 28.098627090, lng: 75.374809265, city_add: "Opp. Police Line, Near Railway Crossing , Phase-2,Riico, Jhunjhunu", is_active: 1 },
+  { id: 14, city_name: "KARAULI", branch_name: "JAIPUR", branch_code: "4", lat: 26.512748718, lng: 77.021934509, city_add: "Infront of S.P. Office, Shukla Colony Corner, Mandrayal Road, Karauli", is_active: 1 },
+  { id: 15, city_name: "KEKRI", branch_name: "AJMER", branch_code: "1", lat: 25.961145401, lng: 75.157318115, city_add: "Ajmer Road, Near Peer Baba, Near R.T.O.Office, Kekri-305404", is_active: 1 },
+  { id: 16, city_name: "KOTA", branch_name: "KOTA", branch_code: "5", lat: 25.129093170, lng: 75.868736267, city_add: "B -259, Ipia Road No-06, Near Railway Flyover, Kota", is_active: 1 },
+  { id: 17, city_name: "KOTPUTLI", branch_name: "JAIPUR", branch_code: "4", lat: 27.680557251, lng: 76.160636902, city_add: "C/o Old Vijay Automobile N.H.8,Teh. Kotputli, Distt. Jaipur (Raj.)", is_active: 1 },
+  { id: 18, city_name: "NEEM KA THANA", branch_name: "JAIPUR", branch_code: "4", lat: 27.741991043, lng: 75.788673401, city_add: "Opp. Jodla Johra, Neem Ka Thana, Dist. Sikar", is_active: 1 },
+  { id: 19, city_name: "NIMBAHERA", branch_name: "BHILWARA", branch_code: "3", lat: 24.617570877, lng: 74.672302246, city_add: "Near Mahaveer Rastaurant,Eidgah Chauraha, Udaipur Road , Nimbahera-312602", is_active: 1 },
+  { id: 20, city_name: "PRATAPGARH", branch_name: "BHILWARA", branch_code: "3", lat: 24.038845062, lng: 74.776138306, city_add: "Ambedkar Circle, Near Anand Service Centre, Opp. Bank Of India, Pratapgarh", is_active: 1 },
+  { id: 21, city_name: "RAJSAMAND", branch_name: "UDAIPUR", branch_code: "7", lat: 25.078897476, lng: 73.866836548, city_add: "Near Indusind Bank Ltd. Tvs Chouraha, Shrinath Hotel, Kankroli, Rajsamand", is_active: 1 },
+  { id: 22, city_name: "RAMGANJMANDI", branch_name: "KOTA", branch_code: "5", lat: 24.655239105, lng: 75.971496582, city_add: "Near Reliance Petrol Pump, Suket Road, Ramganj Mandi.", is_active: 1 },
+  { id: 23, city_name: "SIKAR", branch_name: "SIKAR", branch_code: "6", lat: 27.591619492, lng: 75.171058655, city_add: "Opp. Parnami Motors, Near Circuit House,Jaipur Road , Sikar", is_active: 1 },
+  { id: 25, city_name: "SUJANGARH", branch_name: "SIKAR", branch_code: "6", lat: 27.706758499, lng: 74.481445312, city_add: "Opp.krishi upaj mandi, salasar road, sujangarh, Distt. Churu PIN:331507", is_active: 1 },
+  { id: 26, city_name: "TONK", branch_name: "JAIPUR", branch_code: "4", lat: 26.177381516, lng: 75.810867310, city_add: "Plot No.5, Captain Colony, Jaipur Road, Tonk, Distt.Tonk (Raj.)", is_active: 1 },
+  { id: 27, city_name: "UDAIPUR", branch_name: "UDAIPUR", branch_code: "7", lat: 24.570493698, lng: 73.745994568, city_add: "A – 83, Road No. 1, Mewar Industrial Area, Madri, Udaipur (Raj.)", is_active: 1 },
+  { id: 28, city_name: "VKIA", branch_name: "JAIPUR", branch_code: "4", lat: 27.0103827, lng: 75.7703344, city_add: "2nd Rd, New Karni Colony, Kishan Vatika, Ganesh Nagar, Jaipur, Rajasthan 302013", is_active: 1 },
+];
+
 /* ======================= DIGIT WORD MAP (Hindi + English + Hinglish) ======================= */
 const DIGIT_WORD_MAP = {
   // Hindi
@@ -122,24 +153,56 @@ function extractPhoneDigits(text) {
 
 /* ======================= KEYWORDS ======================= */
 const affirmativeKeywords = [
-  // Hindi
-  'हान','हां','हाँ','जी','सही','ठीक','बिल्कुल','ठीक है','सही है', 'हां जी',
-  'जी हां','जी हाँ','हां जी','हाँ जी','बिल्कुल सही','जी सर','जी मैडम',
+  // Hindi — Simple & clear affirmations
+  'हान','हां','हाँ','जी','सही','ठीक','बिल्कुल','ठीक है','सही है',
+  // Hindi — With pronouns (I, my, me context)
+  'हा मैं हूँ','हा मेरी है','हा मेरा है','हाँ मेरी','हाँ मेरा','हाँ मेरे','मेरी है','मेरा है',
+  'हा मुझे ठीक','मुझे ठीक','मुझे सही','मुझे ये','मैं ठीक हूँ','मैं सही हूँ','main theek hun',
+  // Standard affirmations
+  'जी हां','जी हाँ','हां जी','हाँ जी','बिल्कुल सही','जी सर','जी मैडम','जी भैया','जी दीदी',
   'अच्छा','ओके','ठीक रहेगा','चलेगा','हो गया','माना','दिया','करो','कर दो',
-  'सही है','ठीक है','बराबर है','दर्ज करो','दर्ज कर','रजिस्टर करो', 'आज मेरी है!', 'मेरी है!',
-  // Hinglish / English
-  'yes','yep','yeah','yup','sure','correct','right','ok','okay',
-  'fine','good','ji','sahi','theek','thik','bilkul','haan','han',
-  'absolutely','definitely','affirmative','confirmed','agreed',
-  'kar do','save karo','register karo','darz karo','likh lo',
+  'सही है','ठीक है','बराबर है','दर्ज करो','दर्ज कर','रजिस्टर करो',
+  'चल','चल जाओ','ठीक चल','चलता है','ठीक ठाक','सब ठीक','सब सही',
+  'बढ़िया','शानदार','परफेक्ट','एक्जैक्टली','बिल्कुल वो ही','वही है',
+  'हा से','हाँ से','ये सही है','ये ठीक है','समझ गया','ठीक हो गया',
+  'आप बोलो','आप करो','आप ही करो','तुम ही करो','दे दो','दे दीजिए',
+  'ले लो','ले लीजिए','ले जाओ','रख लो','रख दो',
+  // Hinglish / English — affirmations
+  'yes','yep','yeah','yup','sure','correct','right','ok','okay','okey',
+  'fine','good','ji','sahi','theek','thik','bilkul','haan','han','h','hn',
+  'absolutely','definitely','affirmative','confirmed','agreed','accepted',
+  'sounds good','all good','that works','that is right','that is correct',
+  'kar do','save karo','register karo','darz karo','likh lo','kar le',
+  'proceed','go ahead','let\'s do it','let\'s go','keep going','move on',
+  'main theek','main ready','i am ready','i am good','i am fine',
+  'my number','my address','my city','my name',
 ];
 
 const negativeKeywords = [
+  // Hindi — Simple negations
   'नहीं','नही','ना','नाह','न','गलत','गलत है',
-  'ये नहीं','यह नहीं','मत','मत करो','रहने दो','जरूरत नहीं',
-  'ठीक नहीं','बिल्कुल नहीं','नहीं भाई',
+  // Hindi — With pronouns (Me/My/I context)
+  'मेरा नहीं','मेरी नहीं','मेरे नहीं','मेरी नही','मेरा नही','मुझे नहीं','मुझे नही',
+  'मैं नहीं','मैं नही','मुझे ये नहीं','मेरा नहीं है','ये मेरा नहीं',
+  'मतलब नहीं','मतलब नही','मैं मतलब नहीं','यह नहीं','ये नहीं',
+  // Standard negations
+  'ये नहीं','यह नहीं','वह नहीं','ये गलत','ये सही नहीं','यह सही नहीं',
+  'मत','मत करो','मत दो','नहीं करो','मत हो','नहीं होगा','नहीं होना',
+  'रहने दो','रहने दीजिए','जाने दो','जाने दीजिए','छोड़ दो',
+  'जरूरत नहीं','जरूरत नही','जरा नहीं','बिल्कुल नहीं','कतई नहीं','कभी नहीं',
+  'ठीक नहीं','ठीक नही','सही नहीं','सही नही','बराबर नहीं','बराबर नही',
+  'नहीं भैया','नहीं दीदी','नहीं भैया जी','न भैया','न दीदी','न हीं',
+  'इससे नहीं','इससे नही','इस तरह नहीं','इस तरह नही','इस طा नहीं',
+  'गलत है','बिल्कुल गलत','पूरी गलत','एक दम गलत','सब गलत',
+  'अलग है','भिन्न है','दूसरा है','और कुछ','कुछ और',
+  // Hinglish / English — negations
   'no','nope','nah','na','not','dont',"don't",'never','negative',
-  'wrong','incorrect','galat','nai','nei','disagree','neither'
+  'wrong','incorrect','galat','nai','nei','disagree','neither',
+  'not at all','definitely not','absolutely not','surely not','never',
+  'no way','no thanks','no need','not needed','no requirement',
+  'sounds wrong','that is wrong','that is incorrect','that does not work',
+  'my number is not','my address is not','my city is not',
+  'i am not','i am not ready','not ready','not prepared','not confirmed',
 ];
 
 // Phrases where "nahi" appears BUT the intent is actually to confirm/accept
@@ -150,6 +213,16 @@ const falseNegativePhrases = [
   'nahi ab theek','नहीं अब ठीक','bas sahi hai','बस सही है','बस ठीक है',
   'nahi aur kuch nahi','नहीं और कुछ नहीं','bas yahi','बस यही','इतना ही काफी',
 ];
+
+/* ─── CLARIFICATION KEYWORDS: Help identify when customer needs re-asking ──── */
+const clarificationKeywords = new Set([
+  'क्या','कि','ये','वो','यह','इस','उस','जो','जहा','कहा',
+  'क्या मतलब','क्या हुआ','किस की','कौन','कहाँ','कब',
+  'what','which','who','where','when','why','how',
+  'क्या सुना','क्या पहचाना','क्या लगा','क्या लगो',
+  'haan but','par','lekin','lekín','but','however',
+  'sort of','kind of','maybe','perhaps','possible',
+])
 
 /**
  * isFalseNegative — detects phrases that CONTAIN "nahi" but actually mean "done/confirmed"
@@ -162,16 +235,27 @@ function isFalseNegative(text) {
 }
 
 const uncertaintyKeywords = [
+  // Hindi uncertainty
   'पता नहीं','पता नही','पता न','मुझे पता नहीं','मुझे नहीं पता',
-  'मालूम नहीं','मालूम नही','नहीं मालूम','जानकारी नहीं',
-  'याद नहीं','याद नही','नहीं याद','भूल गया','भूल गयी',
-  'समझ नहीं','समझ नही','नहीं समझ आ रहा','समझ नहीं आया',
+  'मालूम नहीं','मालूम नही','नहीं मालूम','जानकारी नहीं','जानकारी नही',
+  'याद नहीं','याद नही','नहीं याद','भूल गया','भूल गयी','भूल गये',
+  'समझ नहीं','समझ नही','नहीं समझ आ रहा','समझ नहीं आया','समझ में नहीं',
+  // Uncertainty with pronouns
+  'मेरा पता नहीं','मेरी याद नहीं','मेरे को ख़ैर','मुझे मालूम नहीं','मुझे समझ नहीं',
+  'मैं नहीं जानता','मैं नहीं जानती','मुझे उम्मीद नहीं','मुझे शक है',
+  'क्या पता','क्या जाने','किसे पता','संभव है','हो सकता है','शायद',
+  'मेरा ख्याल','मेरे ख्याल से','मुझे लगता','मेरे ख्याल में',
+  // English uncertainty
   'dont know','do not know',"don't know",'dunno','no idea','no clue',
-  'not sure','uncertain','forget','forgot','forgotten',"can't remember"
+  'not sure','uncertain','unsure','forget','forgot','forgotten',"can't remember",
+  'i think','i guess','maybe','perhaps','probably','possibly','perhaps',
+  'sort of','kind of','like','seems like','appears to be',
+  'i am not sure','i dont remember','i dont think','not sure about',
+  'maybe yes','maybe no','could be','might be',
 ];
 
-const repeatKeywords = ['repeat','dobara','fir se','phir se','dubara','again','once more','samjha nahi','क्या बोला'];
-const pauseKeywords = ['रुको','रुक','रुकिए','ek minute','ek min','hold','एक मिनट','एक पल'];
+const repeatKeywords = ['repeat','dobara','fir se','phir se','dubara','again','once more','samjha nahi','क्या बोला','क्या कहा','phir bolo'];
+const pauseKeywords = ['रुको','रुक','रुकिए','रुकिऐ','ek minute','ek min','hold','एक मिनट','एक पल','थोड़ी देर','थोड़ा रुको','रोको','ठहरिये'];
 
 /* ======================= MACHINE TYPES ======================= */
 const machineTypeKeywords = {
@@ -452,13 +536,50 @@ function isUncertain(text) {
 function isAffirmative(text) {
   if (!text) return false;
   const t = text.toLowerCase().trim();
-  return affirmativeKeywords.some(k => t.includes(k.toLowerCase()));
+  
+  // Direct keyword match
+  if (affirmativeKeywords.some(k => t.includes(k.toLowerCase()))) return true;
+  
+  // Check for pronoun-based affirmations with "haan/ha/ji/theek" + possessive/personal pronouns
+  // Match patterns like: "हा मेरा है", "हाँ मेरी है", "मुझे ठीक है", "मैं ठीक हूँ", "यह मेरी है"
+  const affirmPronounPatterns = [
+    /\b(ha|haa|haan|han|haa|hain|hi|he)\s+(mera|meri|mere|mero|mero|hamara|hamari|hamra)\b/i,
+    /\b(mera|meri|mere|hamara|hamari)\s+(hai|he|h|a|sahi|theek|bilkul|ठीक|सही)\b/i,
+    /\b(mujhe|hamko|hamhe|mujhko)\s+(theek|sahi|bilkul|sab|khub|badhiya|badhia)\b/i,
+    /\b(main|mai|men|ham|hum|hamlog)\s+(theek|sahi|ready|tayyar|ok|fine|good)\b/i,
+    /\b(yeh|ye|yah|yaha|iska|uska)\s+(sahi|theek|bilkul|ठीक|सही|ठीक है)\b/i,
+  ];
+  
+  for (const pattern of affirmPronounPatterns) {
+    if (pattern.test(t)) return true;
+  }
+  
+  return false;
 }
 
 function isNegative(text) {
   if (!text) return false;
   const t = text.toLowerCase().trim();
-  return negativeKeywords.some(k => t.includes(k.toLowerCase()));
+  
+  // Direct keyword match
+  if (negativeKeywords.some(k => t.includes(k.toLowerCase()))) return true;
+  
+  // Check for pronoun-based negations with "nahi/na/naa" + possessive/personal pronouns
+  // Match patterns like: "मेरा नहीं है", "मुझे नहीं चाहिए", "मैं नहीं सोचता", "यह मेरी नहीं है"
+  const negPronounPatterns = [
+    /\b(mera|meri|mere|hamara|hamari|hamra)\s+(nahi|nah|na|hi|hee|not|galat|galti)\b/i,
+    /\b(nahi|nah|na|hi|hee|not)\s+(mera|meri|mere|hamara|hamari|hamra)\b/i,
+    /\b(mujhe|hamko|hamhe|mujhko)\s+(nahi|na|galat|bilkul)\s+(chahiye|dhara|pehchan|samjh|lage|lagta)\b/i,
+    /\b(main|mai|men|ham|hum|hamlog)\s+(nahi|na|not|galat|bilkul|kbhi)\s+(hoon|hun|hu|theek|sahi|ready)\b/i,
+    /\b(iska|uska|yah|yeh|ye|yaha)\s+(nahi|na|not|galat|bilkul)\b/i,
+    /\b(nahi|na|not)\s+(hai|h|a|samajh|lag|clear)\b/i,
+  ];
+  
+  for (const pattern of negPronounPatterns) {
+    if (pattern.test(t)) return true;
+  }
+  
+  return false;
 }
 
 function rejectInvalid(text) {
@@ -689,6 +810,62 @@ function askNumber(twiml, text) {
   });
 }
 
+/* ======================= SERVICE CENTER LOCATION MATCHING ======================= */
+/**
+ * matchServiceCenter — Fuzzy match customer speech against SERVICE_CENTERS database
+ * Matches if:
+ *   1. Exact match on city_name (case-insensitive)
+ *   2. First 2+ letters match city_name
+ *   Returns matched center or null
+ */
+function matchServiceCenter(speechInput) {
+  if (!speechInput || speechInput.trim().length < 2) return null;
+  
+  const input = speechInput.trim().toLowerCase();
+  const normalized = input.replace(/[।,!?;|]/g, ' ').split(/\s+/);
+  
+  console.log(`   🔍 Matching service center for: "${speechInput}"`);
+  console.log(`   📍 Tokens: [${normalized.join(', ')}]`);
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  // Try each token against each service center
+  for (const token of normalized) {
+    if (token.length < 2) continue;  // Skip single letters
+    
+    for (const center of SERVICE_CENTERS) {
+      if (!center.is_active) continue;  // Skip inactive centers
+      
+      const centerName = center.city_name.toLowerCase();
+      
+      // Exact match
+      if (centerName === token) {
+        console.log(`   ✅ EXACT MATCH: "${token}" → ${center.city_name}`);
+        return center;
+      }
+      
+      // First 2+ letters match
+      if (centerName.startsWith(token) && token.length >= 2) {
+        const score = token.length / centerName.length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = center;
+          console.log(`   ✓ Partial match: "${token}" → ${center.city_name} (score: ${score.toFixed(2)})`);
+        }
+      }
+    }
+  }
+  
+  if (bestMatch) {
+    console.log(`   ✅ MATCHED: ${bestMatch.city_name} (Branch: ${bestMatch.branch_name}, Code: ${bestMatch.branch_code})`);
+  } else {
+    console.log(`   ❌ NO MATCH found`);
+  }
+  
+  return bestMatch;
+}
+
 /* ======================= CHASSIS NUMBER VALIDATION ======================= */
 /**
  * isValidChassisFormat — machine numbers are 4–8 digit numeric strings
@@ -776,9 +953,15 @@ async function submitComplaintToExternal(complaintData) {
 async function saveComplaint(callData) {
   try {
     const customer      = callData.customerData;
-    const branchOutlet  = detectBranchAndOutlet(callData.city || customer.city);
     const installDate   = customer.installationDate && customer.installationDate !== "NA"
       ? formatDateForExternal(customer.installationDate) : null;
+
+    // ── Use auto-fetched location data from SERVICE_CENTERS matching ──
+    const branch    = callData.branch   || "NA";
+    const outlet    = callData.outlet   || "NA";
+    const city_id   = callData.city_id  || "NA";
+    const lat       = callData.lat      || 0;
+    const lng       = callData.lng      || 0;
 
     // ── Multi-complaint: join all titles & sub-titles for API ──
     const allComplaints = callData.allComplaints || [];
@@ -792,6 +975,7 @@ async function saveComplaint(callData) {
 
     console.log(`📋 Complaint title(s) for API: "${allTitles}"`);
     console.log(`📋 Sub-title(s) for API:       "${allSubTitles}"`);
+    console.log(`📍 Location: Branch=${branch}, Outlet=${outlet}, City_ID=${city_id}`);
 
     const payload = {
       machine_no:               callData.chassis          || "Unknown",
@@ -804,12 +988,12 @@ async function saveComplaint(callData) {
       sub_model:                customer.model            || "NA",
       installation_date:        installDate               || "2025-01-01",
       machine_type:             callData.machineType      || "Warranty",
-      city_id:                  branchOutlet.cityCode,
+      city_id:                  city_id,
       complain_by:              "Customer",
       machine_status:           callData.machineStatus    || "Running With Problem",
       job_location:             callData.jobLocation      || "Onsite",
-      branch:                   branchOutlet.branch,
-      outlet:                   branchOutlet.outlet,
+      branch:                   branch,
+      outlet:                   outlet,
       complaint_details:        callData.rawComplaint     || "Not provided",
       complaint_title:          allTitles,
       sub_title:                allSubTitles,
@@ -820,7 +1004,10 @@ async function saveComplaint(callData) {
       service_date:             callData.serviceDate ? formatDateForExternal(callData.serviceDate) : "",
       from_time:                callData.fromTime         || "",
       to_time:                  callData.toTime           || "",
-      job_close_lat: 0, job_close_lng: 0, job_open_lat: 0, job_open_lng: 0,
+      job_open_lat:             lat,
+      job_open_lng:             lng,
+      job_close_lat:            0,
+      job_close_lng:            0,
     };
 
     return await submitComplaintToExternal(payload);
@@ -1072,8 +1259,7 @@ router.post("/process", async (req, res) => {
       if (isAffirmative(rawSpeech)) {
         callData.step    = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = `Bahut achha ${name} ji! Aapki machine kaunse city mein khadi hai abhi? ` +
-          `Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya Bhilwara?`;
+        callData.lastQuestion = `Bahut achha ${name} ji! Aapki machine kaunse city mein khadi hai abhi? `;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1108,7 +1294,9 @@ router.post("/process", async (req, res) => {
     }
 
     /* ──────────────────────────────────────────────────────
-       STEP 3: ASK CITY (machine location)
+       STEP 3: ASK CITY (machine location city)
+       Now also tries fuzzy matching against SERVICE_CENTERS.
+       If match found → auto-populate location data and skip to phone.
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_city") {
       if (rejectInvalid(rawSpeech)) {
@@ -1117,21 +1305,49 @@ router.post("/process", async (req, res) => {
           callData.city    = callData.customerData?.city || "NA";
           callData.step    = "ask_engineer_location";
           callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Engineer kahan aaye? Aapka address batayein — area aur city.";
+          callData.lastQuestion = "Theek hai. Engineer kahan aaye? Service center ka naam ya address batayein.";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        ask(twiml, "City ka naam batayein. Jaise Jaipur, Kota, Ajmer.");
+        ask(twiml, "City ka naam batayein. Jaise: Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
+      // Try fuzzy matching against SERVICE_CENTERS
+      const matchedCenter = matchServiceCenter(rawSpeech);
+      
+      if (matchedCenter) {
+        // ✅ MATCHED — Auto-populate all location data from SERVICE_CENTERS
+        console.log(`   ✅ Service center matched at city step: ${matchedCenter.city_name}`);
+        callData.city            = matchedCenter.city_name;
+        callData.engineerAddress = matchedCenter.city_add;
+        callData.branch          = matchedCenter.branch_name;
+        callData.outlet          = matchedCenter.city_name;
+        callData.city_id         = matchedCenter.branch_code;
+        callData.lat             = matchedCenter.lat;
+        callData.lng             = matchedCenter.lng;
+        callData.sc_id           = matchedCenter.id;
+        callData.jobLocation     = "Workshop";
+        callData.retries         = 0;
+        
+        console.log(`   📍 AUTO-POPULATED: Branch=${callData.branch}, Outlet=${callData.outlet}, City=${callData.city}`);
+        
+        // Skip ask_engineer_location and go directly to phone
+        callData.step         = "ask_phone";
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // ❌ NO MATCH — Just store city and ask for engineer location
       callData.city    = rawSpeech.trim();
       callData.step    = "ask_engineer_location";
       callData.retries = 0;
-      callData.lastQuestion = `Shukriya! Ab engineer kahan se aayega? ` +
-        `Machine kahan rakhhi hai — area, road, ya landmark batayein.`;
+      callData.lastQuestion = `Shukriya! Ab engineer base ke liye address batayein. ` +
+        `Workshop, Jaipur, Kota—kaunsi jaga par machine hai?`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -1139,12 +1355,12 @@ router.post("/process", async (req, res) => {
 
     /* ──────────────────────────────────────────────────────
        STEP 4: ASK ENGINEER BASE / ADDRESS
-       SIMPLE: Accept the FIRST answer the customer gives.
-       Only re-ask if they literally said nothing / pure noise.
-       Never validate strictness — customer knows their address.
+       Fuzzy match against SERVICE_CENTERS database.
+       Auto-populate: branch, outlet, city_id, lat, lng, address
+       No confirmation — match is final.
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_engineer_location") {
-      // Only reject pure silence, uncertainty, or 1-word noise
+      // Only reject pure silence/noise
       const isEmpty = !rawSpeech || rawSpeech.trim().length < 3;
       const isPureNoise = isEmpty || isUncertain(rawSpeech) ||
         pauseKeywords.some(k => rawSpeech.toLowerCase().includes(k));
@@ -1152,9 +1368,15 @@ router.post("/process", async (req, res) => {
       if (isPureNoise) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 3) {
-          // Give up and skip — use city as fallback address
+          // Give up — use city as fallback
           callData.engineerAddress = callData.city || "Not Provided";
           callData.jobLocation     = "Onsite";
+          callData.branch          = "NA";
+          callData.outlet          = "NA";
+          callData.city_id         = "NA";
+          callData.lat             = 0;
+          callData.lng             = 0;
+          callData.sc_id           = null;
           callData.step            = "ask_phone";
           callData.retries         = 0;
           callData.lastQuestion    = _buildPhoneQuestion(callData);
@@ -1162,18 +1384,50 @@ router.post("/process", async (req, res) => {
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        ask(twiml, "Engineer kahan aaye? Gaon, area, ya road ka naam boliye.");
+        ask(twiml, "Machine kahan rakhhi hai? City, area, workshop, ya landmark boliye. Jaise: Jaipur workshop, Tonk gaon, etc.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // Accept ANYTHING the customer says — they know their address best ✅
-      const detectedLoc        = detectJobLocation(rawSpeech);
-      callData.jobLocation     = detectedLoc || "Onsite";
-      callData.engineerAddress = rawSpeech.trim();
-      callData.retries         = 0;
-      console.log(`   ✅ Address accepted: "${callData.engineerAddress}" | Type: ${callData.jobLocation}`);
+      // Fuzzy match against SERVICE_CENTERS
+      const matchedCenter = matchServiceCenter(rawSpeech);
+      
+      if (matchedCenter) {
+        // ✅ MATCHED — Auto-populate all location data
+        console.log(`   ✅ Service center matched: ${matchedCenter.city_name}`);
+        callData.engineerAddress = matchedCenter.city_add;
+        callData.branch          = matchedCenter.branch_name;
+        callData.outlet          = matchedCenter.city_name;
+        callData.city_id         = matchedCenter.branch_code;
+        callData.lat             = matchedCenter.lat;
+        callData.lng             = matchedCenter.lng;
+        callData.sc_id           = matchedCenter.id;
+        callData.jobLocation     = detectJobLocation(rawSpeech) || "Workshop";
+        callData.retries         = 0;
+        
+        console.log(`   📍 Populated: Branch=${callData.branch}, Outlet=${callData.outlet}, City_ID=${callData.city_id}`);
+        
+        // Move to next step — NO CONFIRMATION
+        callData.step         = "ask_phone";
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
+      // ❌ NO MATCH — Use customer's custom input as address
+      console.log(`   ⚠️ No service center matched — accepting custom address`);
+      callData.engineerAddress = rawSpeech.trim();
+      callData.jobLocation     = detectJobLocation(rawSpeech) || "Onsite";
+      callData.branch          = "NA";
+      callData.outlet          = "NA";
+      callData.city_id         = "NA";
+      callData.lat             = 0;
+      callData.lng             = 0;
+      callData.sc_id           = null;
+      callData.retries         = 0;
+      
+      // Move to next step — NO CONFIRMATION
       callData.step         = "ask_phone";
       callData.lastQuestion = _buildPhoneQuestion(callData);
       askNumber(twiml, callData.lastQuestion);
