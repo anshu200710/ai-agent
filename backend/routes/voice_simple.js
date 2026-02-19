@@ -1064,8 +1064,9 @@ router.post("/process", async (req, res) => {
 
     // Silence / empty input — repeat last question
     if (!SpeechResult && !Digits) {
-      const lastQ = callData.lastQuestion || "Bhai sahab, zara dobara boliye, main sun raha hoon.";
-      ask(twiml, lastQ);
+      callData.retries = (callData.retries || 0) + 1;
+      const silenceMsg = handleSilenceOrEmpty(callData);
+      ask(twiml, silenceMsg);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -1117,6 +1118,18 @@ router.post("/process", async (req, res) => {
          • Total hard-retry limit = 4 across entire machine-no session
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_machine_no") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        askNumber(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       const newDigits = extractOnlyDigits(rawSpeech);
       console.log(`   🔢 New digits this turn: "${newDigits}"`);
       console.log(`   📦 Partial buffer: "${callData.partialMachineNo}" | FreshStart: ${!!callData.machineNoFreshStart}`);
@@ -1248,6 +1261,18 @@ router.post("/process", async (req, res) => {
        then proceed to ask_city after 2 retries (don't loop forever).
     ────────────────────────────────────────────────────── */
     if (callData.step === "confirm_customer") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       const name    = callData.customerData?.name || "";
       const city    = callData.customerData?.city || "";
 
@@ -1294,6 +1319,18 @@ router.post("/process", async (req, res) => {
        If match found → auto-populate location data and skip to phone.
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_city") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 3) {
@@ -1355,6 +1392,18 @@ router.post("/process", async (req, res) => {
        No confirmation — match is final.
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_engineer_location") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       // Only reject pure silence/noise
       const isEmpty = !rawSpeech || rawSpeech.trim().length < 3;
       const isPureNoise = isEmpty || isUncertain(rawSpeech) ||
@@ -1440,6 +1489,18 @@ router.post("/process", async (req, res) => {
          • If customer says "save" / "wahi" / "sahi" → treat as affirmative
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_phone") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        askNumber(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       const knownPhone = callData.customerData?.phone || "";
 
       // Detect "save/wahi/sahi/use this" intent — treat as confirming existing number
@@ -1520,6 +1581,18 @@ router.post("/process", async (req, res) => {
        STEP 5b: CONFIRM PHONE
     ────────────────────────────────────────────────────── */
     if (callData.step === "confirm_phone") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
       if (isAffirmative(rawSpeech)) {
         callData.step    = "ask_complaint";
         callData.retries = 0;
@@ -1559,6 +1632,19 @@ router.post("/process", async (req, res) => {
        • Also appends if customer says "aur bhi" on re-ask
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_complaint") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled && !ci.isComplaintDone) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+      // NOTE: if ci.isComplaintDone === true, fall through to normal logic
+
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 5) {
@@ -1569,7 +1655,7 @@ router.post("/process", async (req, res) => {
         }
         const nudges = [
           "Shukriya ji! Ab mujhe batayein ki machine mein kya taklif ho rahi hai. Sab problems ek saath bata sakte hain — engine, hydraulic, brake, gear, AC — jo bhi pareshani hai, khulke boliye.",
-          "Bhai sahab, machine mein kya taklif hai? Engine, brake, hydraulic, gear — jo bhi dikkat hai, batayein.",
+          "machine mein kya taklif hai? Engine, brake, hydraulic, gear — jo bhi dikkat hai, batayein.",
           "Thodi aur jaankari dijiye — machine kya kar rahi hai ya kya nahi kar rahi? Khulke boliye.",
           "Koi awaaz aa rahi hai? Machine chalu nahi ho rahi? Ya koi aur problem hai? Bata dijiye."
         ];

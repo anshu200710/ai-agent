@@ -60,11 +60,14 @@ const REPEAT_PATTERNS = [
   'baar baar bol', 'mujhe nahi pata kya kaha',
   'kya boliye', 'kya bolein', 'kya kehna tha',
   'dheere boliye', 'dheere bolo', 'thoda dheere',
-  'jaldi mat boliye', 'thoda slowly', 'slowly boliye',
+  'jaldi mat boliye', 'thoda dheere', 'thoda slowly',
   'clear nahi tha', 'clear nahi', 'clear nahi suna',
   'thoda loud boliye', 'aur loud', 'thoda tez boliye',
   'repeat karo', 'repeat karein', 'repeat please',
   'kya tha number', 'number kya tha', 'address kya tha',
+  'mujhe nahi suna', 'yeh kya tha',
+  'line kharab hai', 'connection kharab', 'aawaz nahin aa rahi',
+  'ek baar aur kaha de', 'phir se kah de',
   // English / Hinglish
   'repeat', 'say again', 'come again', 'excuse me',
   'pardon', 'what', 'huh', 'what did you say',
@@ -72,6 +75,15 @@ const REPEAT_PATTERNS = [
   'please repeat', 'can you repeat', 'please say again',
   'speak slowly', 'slow down', 'too fast',
   'what was that', 'what number', 'what address',
+  // Hindi (Devanagari script)
+  'दोबारा', 'दोबारा बोलो', 'दोबारा बोलिए', 'फिर से बोलो', 'फिर से बोलिए',
+  'एक बार और', 'एक बार और बोलिए', 'फिर बोलो',
+  'क्या कहा', 'क्या बोले', 'क्या बोल रहे हो', 'क्या कहा आपने',
+  'नहीं सुना', 'आवाज नहीं आई', 'आवाज नहीं', 'सुनाई नहीं',
+  'समझ नहीं', 'समझ नहीं आया', 'नहीं समझा', 'कुछ नहीं सुना',
+  'दूर लगा', 'नेटवर्क खराब', 'कॉल कट', 'कॉल बंद',
+  'धीरे बोलिए', 'धीरे बोलो', 'साफ बोलिए', 'साफ़ बोल',
+  'क्या संख्या', 'पता नहीं क्या कहा', 'दोबारा बोल', 'एक बार और बोल',
 ];
 
 /* =====================================================================
@@ -81,20 +93,22 @@ const WAIT_PATTERNS = [
   // Hindi — short holds
   'ruko', 'ruk jao', 'ruk jaiye', 'ruko zara', 'zara ruko',
   'ek minute', 'ek min', 'ek second', 'ek sec',
-  'ek pal', 'ek pal ruko', 'thodi der', 'thoda wait',
+  'ek pal', 'ek pal ruko', 'thodi der', 'thoda der',
   'thodi der ruko', 'thoda ruko', 'bas ek minute',
   'ruko yaar', 'bhai ruko', 'didi ruko', 'sir ruko',
-  // Hindi — checking machine
+  'wait karo', 'wait kar', 'thoda wait kar',
+  // Hindi — checking machine/document
   'machine dekh raha hu', 'machine dekh rahi hu',
-  'machine dekh raha hoon', 'machine dekh ke btata',
+  'machine dekh raha hoon', 'machine dekh ke batata',
   'machine dekke bolunga', 'machine dekta hoon',
   'number dekhta hu', 'number dekh raha hu',
   'number dhundh raha hu', 'number dhundh rahi hu',
   'chassis dhundh raha hu', 'chassis dhoondh raha',
-  'paper dhundh raha hu', 'paper dekh raha hu',
+  'kagaz dhundh raha hu', 'kagaz dekh raha hu',
   'document dekh raha hu', 'document nikal raha hu',
   'bahar jaata hu', 'machine ke paas jaata hu',
   'machine ke paas jao', 'machine ke paas chala jata',
+  'site par dekh raha hu', 'site par jaata hu',
   // Hindi — other hold reasons
   'call hold kar', 'hold karo', 'hold karein',
   'abhi aata hu', 'abhi aati hu', 'abhi aate hain',
@@ -104,13 +118,23 @@ const WAIT_PATTERNS = [
   'operator bata raha hai', 'bata raha hai',
   'yad kar raha hu', 'yaad karne do',
   'soochne do', 'sochne do', 'sooch raha hu',
-  // English / Hinglish
-  'wait', 'hold on', 'hold', 'just a second',
-  'just a minute', 'one moment', 'one second',
-  'give me a moment', 'let me check', 'checking',
-  'looking for', 'finding', 'searching',
-  'let me see', 'let me find', 'let me look',
-  'i will be back', 'coming back', 'wait karo',
+  'plate dekh raha hu', 'bill dekh raha hu',
+  'registration paper dekh raha', 'manual dekh raha',
+  'ek minute dekh leta hu', 'thodi der mein batata hu',
+  'thodi der mein pata chalega', 'operator se pata kar raha hu',
+  // Hindi (Devanagari script)
+  'रुको', 'रुक जाओ', 'रुक जाइए', 'एक मिनट', 'एक सेकंड',
+  'एक पल', 'थोड़ी देर', 'थोड़ी देर रुको', 'बस एक मिनट',
+  'रुको यार', 'भाई रुको', 'सर रुको',
+  'मशीन देख रहा हू', 'मशीन देख रहा हूँ', 'नंबर देख रहा हू',
+  'नंबर ढूंढ रहा हू', 'चेसिस ढूंढ रहा हू',
+  'कागज ढूंढ रहा हू', 'कागज देख रहा हू',
+  'दस्तावेज देख रहा हू', 'दस्तावेज निकाल रहा हू',
+  'बाहर जा रहा हू', 'साइट पर जा रहा हू',
+  'अभी आता हू', 'अभी आएंगे',
+  'किसी से पूछ रहा हू', 'ड्राइवर से पूछ रहा हू',
+  'ऑपरेटर से पूछ रहा हू', 'गाड़ी पर है', 'साइट पर है',
+  'बता रहा है', 'याद कर रहा हू', 'सोच रहा हू',
 ];
 
 /* =====================================================================
@@ -141,6 +165,18 @@ const CONFUSED_PATTERNS = [
   'dont know what to say', 'not sure', 'unsure',
   'help me', 'please help', 'guide me',
   'what should i say', 'how to answer', 'what answer',
+  // Hindi (Devanagari script)
+  'क्या', 'क्या मतलब', 'क्या मतलब है', 'क्या बोल रहे हो',
+  'मतलब क्या है', 'मतलब क्या', 'मतलब बताओ',
+  'क्या पूछ रहे हो', 'क्या चाहिए', 'क्या करना है',
+  'नहीं समझा', 'नहीं समझी', 'समझ नहीं', 'समझ नहीं आया',
+  'नहीं समझा', 'कुछ नहीं समझ आया',
+  'थोड़ा समझाओ', 'समझाओ', 'बताओ',
+  'पहले से कुछ नहीं पता', 'नया कस्टमर हूँ',
+  'पहली बार कॉल कर रहा हू', 'यह क्या नंबर है',
+  'मुझे नहीं पता', 'पता नहीं', 'समझ में नहीं आया',
+  'गाइड करो', 'समझा दो', 'साफ़ करके बोलो',
+  'मुझे गाइड करो', 'गाइड कर दे', 'बता दे',
 ];
 
 /* =====================================================================
@@ -156,6 +192,15 @@ const CHECKING_PATTERNS = [
   'operator se pata kar', 'driver se pata kar',
   'site par confirm kar', 'puchh ke aata hu',
   'check karta hu', 'note karta hu',
+  // Hindi (Devanagari script)
+  'मशीन देख रहा हू', 'मशीन देख रहा हूँ', 'मशीन देख रहे हो',
+  'नंबर देख रहा हू', 'नंबर देख रहा हूँ', 'नंबर देख रहे हो',
+  'नंबर ढूंढ रहा हू', 'नंबर ढूंढ रहा हूँ',
+  'प्लेट देख रहा हू', 'प्लेट देख रहा हूँ',
+  'दस्तावेज़ देख रहा हू', 'दस्तावेज़ निकाल रहा हू',
+  'कागज देख रहा हू', 'कागज ढूंढ रहा हू',
+  'चेसिस नंबर ढूंढ रहा', 'मशीन का नंबर देख रहा',
+  'डॉक्यूमेंट निकाल रहा', 'कागज़ ढूंढ रहा हू',
 ];
 
 /* =====================================================================
@@ -173,11 +218,33 @@ const COMPLAINT_DONE_PATTERNS = [
   'haan register', 'kar do register',
   'complaint darz', 'complaint register',
   'ho gaya', 'itna hi batana tha', 'itna hi tha',
+  'sirf itna hi problem hai', 'itna hi complaint hai',
+  'kaam khatam', 'to ho gaya', 'theek hai to likha do',
+  'ab likha de complaint', 'ab submit kar de',
+  'bas ab bas', 'ab aur kuch nahi', 'thik se likh lo',
+  'yeh problem hai bas', 'aur koi taklif nahi',
+  'saari taklif bata di', 'sara complaint bata diya',
+  'ek ek problem bol diya', 'sab problems bata di',
+  'ab enter kar de', 'register kar de bhai',
   // English / Hinglish
   'that is all', 'thats all', 'nothing else',
-  'only this', 'just this', 'bas yahi hai',
-  'register this', 'please register', 'save this',
-  'done', 'finished', 'complete', 'all done',
+  'only this', 'just this', 'register this', 'please register',
+  'save this', 'done', 'finished', 'complete', 'all done',
+  // Hindi (Devanagari script)
+  'बस', 'बस इतना', 'बस इतना ही', 'बस यही',
+  'यही समस्या है', 'यही है', 'यही बात है',
+  'और कुछ नहीं', 'और कोई समस्या नहीं',
+  'सिर्फ यही', 'सिर्फ यह एक', 'एक ही समस्या',
+  'यह ही सब', 'यही सब है', 'सब कुछ यही है',
+  'ठीक है और कुछ नहीं', 'ओके बस इतना ही',
+  'रजिस्टर करो', 'दर्ज करो', 'लिख लो',
+  'हाँ रजिस्टर', 'कर दो रजिस्टर',
+  'कंप्लेंट दर्ज', 'कंप्लेंट रजिस्टर',
+  'हो गया', 'इतना ही बताना था', 'इतना ही था',
+  'सिर्फ इतना ही समस्या है', 'इतना ही कंप्लेंट है',
+  'काम खत्म', 'तो हो गया', 'ठीक है तो लिख दो',
+  'अब लिख दे कंप्लेंट', 'अब सबमिट कर दे',
+  'बस अब बस', 'अब और कुछ नहीं', 'ठीक से लिख लो',
 ];
 
 /* =====================================================================
@@ -185,12 +252,25 @@ const COMPLAINT_DONE_PATTERNS = [
    ===================================================================== */
 const HELP_PATTERNS = [
   'help', 'help karo', 'help chahiye', 'help kijiye',
+  'help de zara', 'madad kar', 'madad chahiye',
   'guide karo', 'guide karein', 'samjhao',
   'kya karna hai mujhe', 'kya bolna chahiye',
   'kaise bolun', 'kaise batau', 'kaise bolunga',
   'process kya hai', 'kya process hai',
   'agent se baat', 'agent chahiye', 'insaan chahiye',
-  'real person', 'manushya se baat', 'human se baat',
+  'real person', 'aadmi se baat kar', 'manushya se baat', 'human se baat',
+  'mujhe samjhao', 'guide kar de', 'batao na', 'procedure',
+  // Hindi (Devanagari script)
+  'मदद', 'मदद करो', 'मदद करें', 'मदद कर दो',
+  'मदद दे', 'मदद की जरूरत है', 'मदद चाहिए',
+  'गाइड करो', 'गाइड कर दे', 'समझा दो', 'समझाओ',
+  'क्या करना है', 'क्या बोलना चाहिए', 'कैसे बोलूँ',
+  'कैसे बताऊँ', 'कैसे बोलूँगा', 'क्या पूछूँ',
+  'प्रक्रिया क्या है', 'प्रक्रिया कैसे होती है',
+  'एजेंट से बात करना है', 'एजेंट चाहिए', 'इंसान चाहिए',
+  'असली इंसान', 'आदमी से बात करना', 'मानव से बात', 'असली व्यक्ति',
+  'मुझे समझा दो', 'गाइड कर दे भाई', 'प्रक्रिया बताओ', 'यह क्या है',
+  'कोई समझा दे', 'समझ नहीं आ रहा', 'मुझे पता नहीं है',
 ];
 
 /* =====================================================================
