@@ -28,16 +28,56 @@ const ENGLISH_NOISE_WORDS = [
 
 // ======================= HINDI DIGIT WORDS =======================
 const HINDI_DIGITS = {
-  'शून्य': '0', 'जीरो': '0', 'zero': '0',
-  'एक': '1', 'एक': '1', 'one': '1', 'ek': '1',
-  'दो': '2', 'दुई': '2', 'two': '2', 'do': '2',
-  'तीन': '3', 'three': '3', 'teen': '3',
-  'चार': '4', 'four': '4', 'char': '4',
-  'पांच': '5', 'paanch': '5', 'panch': '5', 'five': '5',
-  'छः': '6', 'छह': '6', 'chhe': '6', 'six': '6',
-  'सात': '7', 'saat': '7', 'seven': '7',
-  'आठ': '8', 'aath': '8', 'eight': '8',
-  'नौ': '9', 'nau': '9', 'nine': '9'
+  // 0 - शून्य / जीरो
+  'शून्य': '0', 'सून्य': '0', 'जीरो': '0', 'ज़ीरो': '0', 'जिरो': '0', 'zero': '0', 'o': '0', 'oh': '0', 'ou': '0',
+  
+  // 1 - एक / वन
+  'एक': '1', 'एेक': '1', 'one': '1', 'ek': '1', 'eka': '1', 'vun': '1', 'wan': '1', 'wun': '1', 'ek': '1',
+  
+  // 2 - दो / टू
+  'दो': '2', 'दू': '2', 'दुई': '2', 'two': '2', 'too': '2', 'tu': '2', 'do': '2', 'dow': '2', 'dou': '2',
+  
+  // 3 - तीन / थ्री
+  'तीन': '3', 'तिन': '3', 'three': '3', 'thee': '3', 'teen': '3', 'tin': '3', 'threen': '3', 'tinn': '3',
+  
+  // 4 - चार / फोर
+  'चार': '4', 'चर': '4', 'four': '4', 'for': '4', 'char': '4', 'foor': '4', 'chaar': '4',
+  
+  // 5 - पांच / फाइव
+  'पांच': '5', 'पाँच': '5', 'पञ्च': '5', 'panch': '5', 'paanch': '5', 'panc': '5', 'five': '5', 'paunch': '5', 'punch': '5', 'paunch': '5',
+  
+  // 6 - छः / सिक्स
+  'छः': '6', 'छ': '6', 'छह': '6', 'chhe': '6', 'chhah': '6', 'chah': '6', 'six': '6', 'siks': '6', 'chha': '6',
+  
+  // 7 - सात / सेवन
+  'सात': '7', 'साते': '7', 'saat': '7', 'seven': '7', 'savon': '7', 'savan': '7', 'sat': '7', 'saath': '7',
+  
+  // 8 - आठ / एट
+  'आठ': '8', 'अठ': '8', 'aath': '8', 'ath': '8', 'eight': '8', 'eit': '8', 'ate': '8', 'aat': '8',
+  
+  // 9 - नौ / नाइन
+  'नौ': '9', 'नाै': '9', 'नो': '9', 'नु': '9', 'nau': '9', 'no': '9', 'nu': '9', 'nine': '9', 'nain': '9', 'nauu': '9',
+  
+  // Counting units (लाख, हजार, सौ, दहाई)
+  'लाख': '00000',      // 100,000 - becomes 5 zeros (not typically used in chassis, but handle it)
+  'lakh': '00000',     // English
+  'hazaar': '000',     // 1,000 - becomes 3 zeros
+  'हजार': '000',      // Hindi
+  'thousand': '000',   // English
+  'sau': '00',         // 100 - becomes 2 zeros
+  'सौ': '00',         // Hindi
+  'hundred': '00',     // English
+  'dahaai': '0',       // 10 - becomes 1 zero (rare in speech)
+  'दहाई': '0',        // Hindi
+  'ten': '0',          // English
+  
+  // Common abbreviations/slang that might appear
+  'और': ' ',          // For "और" between digits
+  'to': ' ',           // For "to" between digits (informal "then")
+  'toh': ' ',          // Another variant
+  'fir': ' ',          // "फिर" = then
+  'phir': ' ',         // Alternate spelling
+  'pir': ' '           // Another variant
 };
 
 // ======================= COMMON NAMES DATABASE =======================
@@ -560,41 +600,191 @@ export function isValidPhone(phone) {
 export function extractChassisNumberV2(text) {
   if (!text) return null;
 
-  console.log(`\n🔧 CHASSIS EXTRACTION START`);
-  console.log(`   Input: ${text}`);
+  console.log(`\n🔧 CHASSIS EXTRACTION START - ENHANCED V3`);
+  console.log(`   📢 Input (Raw): "${text}"`);
 
-  // Remove noise words
-  let cleaned = text.toLowerCase()
-    .replace(/[।,!?;:'"-]/g, ' ') // Remove punctuation
-    .replace(/\b(मेरी|मेरा|मेरे|मशीन|नंबर|संख्या|है|हैं|का|की|चेसिस|chassis|number|no)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let cleaned = text.toLowerCase().trim();
 
-  console.log(`   After removing noise: ${cleaned}`);
-
-  // Extract longest digit sequence (usually chassis)
-  const digitSequences = cleaned.match(/\d+/g) || [];
-  console.log(`   Digit sequences: [${digitSequences.join(', ')}]`);
-
-  if (digitSequences.length === 0) return null;
-
-  // Find longest sequence
-  let chassis = digitSequences.reduce((a, b) => a.length >= b.length ? a : b);
+  // ==== STEP 1: Handle Hindi counting (lakh, hazaar, sau) ====
+  console.log(`   📝 STEP 1: Expanding Hindi counting units...`);
+  let expandedCounting = cleaned;
   
-  // Chassis should be 4-7 digits
-  if (chassis.length >= 4 && chassis.length <= 7) {
-    console.log(`   ✅ Chassis extracted: ${chassis}`);
-    return chassis;
+  // Handle larger units first
+  // Pattern: "ek lakh pachchis" = 1 * 100000 + 25 = 100025
+  // For chassis purposes, we typically only want the numeric part
+  const countingPatterns = [
+    { pattern: /(\d+)\s*(lakh|लाख)/gi, multiply: 100000 },
+    { pattern: /(\d+)\s*(hazaar|हजार|thousand)/gi, multiply: 1000 },
+    { pattern: /(\d+)\s*(sau|सौ|hundred)/gi, multiply: 100 },
+  ];
+  
+  let countingMatches = [];
+  for (const { pattern, multiply } of countingPatterns) {
+    const match = expandedCounting.match(pattern);
+    if (match) {
+      countingMatches.push(`${match[0]} (${multiply}x)`);
+    }
+  }
+  
+  if (countingMatches.length > 0) {
+    console.log(`      Counting units found: [${countingMatches.join(', ')}]`);
+  }
+  console.log(`      Input after counting units: "${expandedCounting}"`);
+
+  // ==== STEP 2: Convert Hindi digit words to English digits ====
+  console.log(`   📝 STEP 2: Converting Hindi/English digit words...`);
+  let digitConverted = expandedCounting;
+  let hindiDigitMatches = [];
+  
+  for (const [hindiWord, digit] of Object.entries(HINDI_DIGITS)) {
+    // Use word boundaries for safety, but allow optional 'a' at end (like "eka" vs "ek")
+    const regex = new RegExp(`\\b${hindiWord}\\b`, 'gi');
+    const testRegex = new RegExp(`\\b${hindiWord}\\b`, 'i');
+    
+    if (testRegex.test(digitConverted)) {
+      const matches = digitConverted.match(new RegExp(`\\b${hindiWord}\\b`, 'gi')) || [];
+      hindiDigitMatches.push(`${hindiWord}→${digit} (×${matches.length})`);
+      digitConverted = digitConverted.replace(regex, digit);
+    }
+  }
+  
+  if (hindiDigitMatches.length > 0) {
+    console.log(`      Hindi/English words converted: [${hindiDigitMatches.join(', ')}]`);
+  }
+  console.log(`      After conversion: "${digitConverted}"`);
+
+  // ==== STEP 3: Handle separators and clean up ====
+  console.log(`   📝 STEP 3: Handling separators, breaks & duplicates...`);
+  
+  // Replace common separators with spaces
+  let normalized = digitConverted
+    .replace(/[,;।]/g, ' ')                          // Commas, semicolons → space
+    .replace(/\s+(and|or|plus|dash|minus)\s+/gi, ' ')  // Logic words → space
+    .replace(/\s+/g, ' ')                            // Multiple spaces → single space
+    .trim();
+  
+  console.log(`      After separator normalization: "${normalized}"`);
+
+  // ==== STEP 4: Handle DUPLICATE digits (e.g., "3 3" → "33") ====
+  console.log(`   📝 STEP 4: Detecting and handling duplicates...`);
+  
+  const words = normalized.split(/\s+/);
+  let processedWords = [];
+  let i = 0;
+  
+  while (i < words.length) {
+    const current = words[i];
+    
+    // Check if current word is a digit/number
+    if (/^\d+$/.test(current)) {
+      // Look ahead for same digit repeated
+      let duplicateCount = 1;
+      while (i + duplicateCount < words.length && words[i + duplicateCount] === current) {
+        duplicateCount++;
+      }
+      
+      if (duplicateCount > 1) {
+        // We have duplicates like "3 3 3" → "333"
+        console.log(`      🔄 Duplicate detected: "${current}" repeated ${duplicateCount}x → "${current.repeat(duplicateCount)}"`);
+        processedWords.push(current.repeat(duplicateCount));
+        i += duplicateCount;
+      } else {
+        processedWords.push(current);
+        i++;
+      }
+    } else {
+      // Non-numeric word, skip it
+      console.log(`      ⏭️  Skipping non-numeric: "${current}"`);
+      i++;
+    }
+  }
+  
+  console.log(`      Processed words: [${processedWords.join(', ')}]`);
+
+  // ==== STEP 5: Extract all digit sequences ====
+  console.log(`   📝 STEP 5: Extracting digit sequences...`);
+  
+  // Combine all processed words and extract digit sequences
+  const reconstructed = processedWords.join('');
+  const digitSequences = reconstructed.match(/\d+/g) || [];
+  const totalDigits = digitSequences.reduce((sum, seq) => sum + seq.length, 0);
+  
+  console.log(`      Found sequences: [${digitSequences.join(', ')}]`);
+  console.log(`      Total digit count: ${totalDigits}`);
+
+  if (digitSequences.length === 0) {
+    console.log(`   ❌ No digits found in input`);
+    return null;
   }
 
-  console.log(`   ❌ No valid chassis found`);
+  // ==== STEP 6: Intelligently combine sequences ====
+  console.log(`   📝 STEP 6: Smart sequence combination...`);
+  
+  // Strategy A: If total digits range 4-8 → concatenate all
+  if (totalDigits >= 4 && totalDigits <= 8) {
+    const combined = digitSequences.join('');
+    console.log(`      ✅ A) Concatenated (${totalDigits} total digits): ${combined}`);
+    console.log(`         This handles: "3 then 0 then 5 4 4 7" or "303 and 05447" or "3 3 zero 5 4 4 7" → 3305447`);
+    return combined;
+  }
+
+  // Strategy B: If total > 8, try to find valid 4-8 digit sequence
+  if (totalDigits > 8) {
+    console.log(`      Total too large (${totalDigits}). Looking for valid 4-8 substring...`);
+    
+    // Find longest consecutive 4-8 digit sequence
+    for (let len = 8; len >= 4; len--) {
+      for (let i = 0; i <= digitSequences.length - 1; i++) {
+        let candidate = digitSequences.slice(i, i + 1).join('');
+        if (candidate.length >= 4 && candidate.length <= 8) {
+          console.log(`      ✅ B) Found valid sequence: ${candidate} (${candidate.length} digits)`);
+          return candidate;
+        }
+      }
+    }
+  }
+
+  // Strategy C: If total < 4, check if it's padded digit (like "05447" = 5447)
+  if (totalDigits >= 3 && totalDigits < 4) {
+    const combined = digitSequences.join('');
+    if (combined.length === 3) {
+      console.log(`      ⚠️  Only 3 digits, might need leading zero. Combined: ${combined}`);
+    }
+    return combined.padStart(4, '0'); // Pad to at least 4 digits
+  }
+
+  // Strategy D: Find longest single sequence with fallback
+  let longestSequence = digitSequences.reduce((a, b) => 
+    a.length >= b.length ? a : b, digitSequences[0]
+  );
+  
+  if (longestSequence.length >= 4 && longestSequence.length <= 8) {
+    console.log(`      ✅ D) Longest sequence: ${longestSequence} (${longestSequence.length} digits)`);
+    return longestSequence;
+  }
+
+  // If longest is < 4, maybe concatenate first few sequences
+  if (longestSequence.length < 4) {
+    const concat = digitSequences.slice(0, Math.min(3, digitSequences.length)).join('');
+    if (concat.length >= 4 && concat.length <= 8) {
+      console.log(`      ✅ E) Concatenating first sequences: ${concat} (${concat.length} digits)`);
+      return concat;
+    }
+  }
+
+  console.log(`   ❌ FAILED: No valid chassis found`);
+  console.log(`      Concatenated would be ${totalDigits} digits (need 4-8)`);
+  console.log(`      Longest sequence is ${longestSequence.length} digits (need 4-8)`);
+  
   return null;
 }
 
 export function isValidChassis(chassis) {
   if (!chassis) return false;
-  // Should be 4-7 digit sequence
-  return /^\d{4,7}$/.test(chassis.toString());
+  // Should be 4-8 digit sequence (handles concatenated sequences like "3305447")
+  const valid = /^\d{4,8}$/.test(chassis.toString());
+  console.log(`   🔍 Chassis validation: "${chassis}" → ${valid ? '✅ VALID' : '❌ INVALID'}`);
+  return valid;
 }
 
 
@@ -707,5 +897,230 @@ function romanizeDevanagari(text) {
   }
   return romanized;
 }
+
+// ======================= COMPREHENSIVE HINDI-TO-ENGLISH CONVERSION =======================
+const HINDI_TO_ENGLISH_MAP = {
+  // Common words customer might say
+  'हाँ': 'yes', 'हां': 'yes', 'जी': 'yes', 'बिल्कुल': 'absolutely', 'ठीक': 'okay', 'ठीक है': 'okay', 'सही': 'right',
+  'नहीं': 'no', 'नही': 'no', 'ना': 'no', 'मत': 'no', 'नाह': 'no',
+  'रुको': 'wait', 'सुनो': 'listen', 'समझो': 'understand', 'बताओ': 'tell', 'बताये': 'tell', 
+  'क्या': 'what', 'कब': 'when', 'कहाँ': 'where', 'कौन': 'who', 'क्यों': 'why', 'कैसे': 'how',
+  'मेरी': 'my', 'मेरा': 'my', 'मेरे': 'my', 'आपकी': 'your', 'आपका': 'your', 'आपके': 'your',
+  'मशीन': 'machine', 'मशीन में': 'in machine', 'मशीन का': 'machine\'s', 'समस्या': 'problem', 'समस्या है': 'is problem',
+  'खराब': 'broken', 'टूटा': 'broken', 'नहीं चल रहा': 'not working', 'काम नहीं कर रहा': 'not working',
+  'दशा': 'condition', 'स्थिति': 'condition', 'हालत': 'condition', 'हिसाब': 'detail',
+  'दोबारा': 'again', 'फिर से': 'again', 'एक बार': 'once', 'बार-बार': 'repeatedly',
+  'पहले': 'before', 'अभी': 'now', 'अभी नहीं': 'not now', 'बाद में': 'later', 'कभी भी': 'anytime',
+  'एक से ज्यादा': 'more than one', 'एकाधिक': 'multiple', 'अनेक': 'multiple', 'कई': 'many',
+  'ठीक है': 'okay', 'चलेगा': 'okay', 'ठीक हो गया': 'okay got it', 'समझ गया': 'understood',
+  'पूरी जानकारी': 'full information', 'विस्तार से': 'in detail', 'विस्तृत': 'detailed', 'सब कुछ': 'everything',
+  'बस': 'that\'s it', 'बस इतना ही': 'that\'s all', 'बात': 'thing', 'बात करना': 'to talk',
+  'भेज दो': 'send', 'भेज दीजिये': 'send', 'यह ठीक है': 'this is okay', 'अच्छा': 'okay', 'ठीक हो गया': 'done',
+  'काठ': 'which', 'कौन सा': 'which one', 'कौन सी': 'which',
+  'से': 'from', 'तक': 'till', 'और': 'and', 'या': 'or', 'लेकिन': 'but', 'मगर': 'but',
+  'वह': 'that', 'यह': 'this', 'ये': 'these', 'वो': 'that', 'यहाँ': 'here', 'वहाँ': 'there',
+  'सर': 'sir', 'साहब': 'sir', 'जनाब': 'sir', 'भैया': 'brother', 'दीदी': 'sister',
+  'धन्यवाद': 'thank you', 'शुक्रिया': 'thank you', 'सुबह': 'morning', 'दोपहर': 'afternoon', 'शाम': 'evening', 'रात': 'night',
+  'सोमवार': 'monday', 'मंगलवार': 'tuesday', 'बुधवार': 'wednesday', 'गुरुवार': 'thursday', 'शुक्रवार': 'friday', 'शनिवार': 'saturday', 'रविवार': 'sunday',
+  'आज': 'today', 'कल': 'tomorrow/yesterday', 'परसों': 'day after tomorrow', 'पिछले': 'last', 'अगले': 'next',
+  'घर': 'home', 'ऑफिस': 'office', 'साइट': 'site', 'गोदाम': 'warehouse', 'खेत': 'field', 'दुकान': 'shop',
+  'चेसिस': 'chassis', 'नंबर': 'number', 'रजिस्ट्रेशन': 'registration', 'डॉक्यूमेंट': 'document',
+  'इंजन': 'engine', 'ट्रांसमिशन': 'transmission', 'ब्रेक': 'brake', 'हाइड्रोलिक्स': 'hydraulics', 'इलेक्ट्रिकल': 'electrical',
+  'शीतलन': 'cooling', 'एयर कंडीशनर': 'ac', 'स्टीयरिंग': 'steering', 'क्लच': 'clutch', 'ईंधन': 'fuel', 'बाल्टी': 'bucket', 'बूम': 'boom',
+  'खराबी': 'fault', 'खराबियाँ': 'faults', 'खराबिया': 'faults', 'दोष': 'fault', 'बीमारी': 'issue',
+  'आवाज़': 'sound', 'आवाज': 'sound', 'शोर': 'noise', 'कंपन': 'vibration', 'झटका': 'jerk', 'रिसाव': 'leak',
+  'तेल': 'oil', 'पानी': 'water', 'ईंधन': 'fuel', 'गैस': 'gas', 'धुआँ': 'smoke', 'गंध': 'smell',
+  'शुरू': 'start', 'शुरू नहीं हो रहा': 'not starting', 'चल रहा है': 'running', 'चल नहीं रहा': 'not running',
+  'चलाना': 'operate', 'कर रहा है': 'doing', 'किया है': 'did', 'किया हूँ': 'did',
+  'मजबूत': 'strong', 'कमजोर': 'weak', 'तेज़': 'fast', 'धीमा': 'slow', 'ठंडा': 'cold', 'गरम': 'hot', 'गर्म': 'hot',
+};
+
+// ======================= CUSTOMER SPEECH PATTERNS =======================
+const CUSTOMER_SPEECH_PATTERNS = {
+  // Rejections and corrections
+  negation: [
+    /मैने (ये|यह|यहाँ|वो|ये|is|this|that) (नहीं|नही|na|no)/i,
+    /मैंने (ये|यह|यहाँ) (नहीं|नही|na|no)/i,
+    /मुझे (ये|यह) (नहीं|नही|no)?.*कहा/i,
+    /मैं (ये|यह) (नहीं|नही|na|no) कर रहा|कर रही/i,
+    /(ye|ये|यह|इसे) (nahi|नहीं|नही|no|na)/i,
+    /(first|पहले|शुरुआत में) (mein|में) (ye|ये|यह) (nahi|नहीं|नही)/i,
+    /(already|पहले से) (said|कहा|बोल|बताया)/i,
+    /(maine ye nahi|I didn't say)/i,
+  ],
+  
+  // Multiple problems
+  multipleProblem: [
+    /एक (से ज्यादा|से अधिक|से) (समस्या|problem|dikkat)/i,
+    /कई (समस्या|problem|issue)/i,
+    /अनेक (समस्या|समस्याएं|problems)/i,
+    /(multiple|कई|अनेक) (problem|issue|समस्या)/i,
+    /दो\b.*और.*समस्या/i,
+    /समस्या (है और भी|है एक और)/i,
+    /(bhi ye problem|और भी|aur bhi)/i,
+  ],
+  
+  // Need more time/not available now
+  timeNotNow: [
+    /अभी (समय|time) (नहीं|नही|no) (है|दे सकता)/i,
+    /अभी (बता|tell) (नहीं|नही|no) (सकता|सकती|सकते)/i,
+    /समय (अभी|पता) (नहीं|नही|no)/i,
+    /(time nahi|time is not|no timing) (right now|abhi)/i,
+    /बाद में (बताता|बताऊँ|बताऊ)?/i,
+    /(later|baad mein|fir) (बताता|बताऊँ|बताऊ|tell)/i,
+    /(dont|मत|nai) (know|पता|मालूम) (time|समय)/i,
+  ],
+  
+  // Send anytime/flexible
+  anytimeSend: [
+    /कभी (भी|बी) (भेज|send|aao)/i,
+    /(anytime|कभी भी)/i,
+    /(जब सुविधा|when convenient|जब फुर्सत)/i,
+    /समय (मत|मा) (फिक्र|worry) (करो|करो|कीजिए)/i,
+    /(no issue|कोई समस्या|pakad nahi)/i,
+  ],
+  
+  // Ask for full information
+  needFullInfo: [
+    /पूरी (जानकारी|information|details)/i,
+    /विस्तार (से|with) (बीता|बताना|बताई)/i,
+    /सब (कुछ|आकर|properly) (बता|tell|bolna)/i,
+    /पूरा (हिसाब|account|detail|डाटा|data)/i,
+    /detailed (information|explanation|हिसाब)/i,
+    /(mujhe|को) (aapka|आपका|आपकी) (sara|सारा) (data|डाटा) (chahiye|चाहिए)/i,
+  ],
+  
+  // Acknowledgment/understanding
+  understood: [
+    /(समझ|samjh) (गया|गई|गए|gaya)/i,
+    /(ठीक|thik) (है|ho gya|okay)/i,
+    /(sir|सर) (सब|सब|all) (clear|clear|समझ|समझ) (गया|gaya)/i,
+    /मुझे (clear|साफ|स्पष्ट|समझ) (आ गया|गया|गयी)/i,
+    /(understood|samjh gaya|clear|ok)/i,
+    /(sir|sab|सब|सर) (thik|ठीक) (hai|है|ho gya)/i,
+  ],
+  
+  // Need clarification/explanation
+  needClarify: [
+    /मुझे (और|अधिक|properly|साफ|विस्तार) (से)? (बता|समझा|explain)/i,
+    /(clearly|साफ|स्पष्ट) (explain|बताइए|समझाइए|samjhao)/i,
+    /(kya matlab|क्या मतलब|what means|what does|iska matlab kya)/i,
+    /फिर से (समझा|explain|बता)/i,
+    /(समझ नहीं|I don't understand|clear नहीं)/i,
+  ],
+  
+  // Agreement with urgency/casualness
+  flexibility: [
+    /(जब संभव|when possible|जब सके)/i,
+    /(pressure|जल्दी|urgent) (नहीं|नही|not|optional)/i,
+    /(कोई जल्दबाज़ी|no hurry|कोई परवाह नहीं)/i,
+    /(आराम|जब सुविधा|whenever) (से|लगे|convenient)/i,
+  ],
+  
+  // Complaint re-listening request
+  repeatComplaint: [
+    /(complaint|शिकायत|समस्या) (दो?बारा|फिर से|again|अन्य)/i,
+    /(सुनो|listen) (मेरी|to my|शिकायत|complaint)/i,
+    /(फिर से|dusri bar|दूसरी बार|again) (सुनो|listen)/i,
+    /मेरी (बात|complaint|शिकायत) (सुनो|listen)/i,
+  ],
+  
+  // Service-related statements
+  serviceAsk: [
+    /(service|सर्विस|काम) (कब|when|में) (आओ|आएंगे|करोगे)/i,
+    /(डॉक्टर|engineer|टेक्निशियन) (कब भेजोगे|when send|भेज दो)/i,
+    /(charge|खर्च|वारंटी|warranty) (क्या|how much|कितना)/i,
+  ],
+  
+  // Other acknowledgments
+  okay: [
+    /(ठीक|ok|okay|alright|सही|चलेगा)/i,
+    /(चलता|चलेगा|चल|works?) (है|है)\b/i,
+  ],
+};
+
+// ======================= CONVERT HINDI TO ENGLISH FOR API SUBMISSION =======================
+export function convertHindiToEnglish(text) {
+  if (!text) return text;
+  
+  let converted = text;
+  
+  // First, use the mapping table for common words
+  for (const [hindi, english] of Object.entries(HINDI_TO_ENGLISH_MAP)) {
+    const regex = new RegExp(`\\b${hindi}\\b`, 'gi');
+    converted = converted.replace(regex, english);
+  }
+  
+  // Then romanize remaining Devanagari characters
+  converted = romanizeDevanagari(converted);
+  
+  // Clean up any remaining non-ASCII except spaces, hyphens and basic punctuation
+  converted = converted.replace(/[^\w\s\-.,!?]/g, ' ');
+  
+  // Remove extra spaces
+  converted = converted.replace(/\s+/g, ' ').trim();
+  
+  return converted;
+}
+
+// ======================= CLEAN & CONVERT COMPLAINT DATA FOR API =======================
+export function sanitizeComplaintDataForAPI(complaintData) {
+  if (!complaintData) return null;
+  
+  console.log(`\n🔄 SANITIZING COMPLAINT DATA FOR API SUBMISSION`);
+  console.log(`   Input Title: ${complaintData.complaintTitle}`);
+  console.log(`   Input SubTitle: ${complaintData.complaintSubTitle}`);
+  
+  const sanitized = {
+    chassis: complaintData.chassis,
+    customerName: convertHindiToEnglish(complaintData.customerName || ''),
+    customerPhone: complaintData.customerPhone,
+    location: convertHindiToEnglish(complaintData.location || complaintData.jobLocation || ''),
+    address: convertHindiToEnglish(complaintData.address || ''),
+    complaintTitle: convertHindiToEnglish(complaintData.complaintTitle || ''),
+    complaintSubTitle: convertHindiToEnglish(complaintData.complaintSubTitle || 'Other'),
+    rawComplaint: convertHindiToEnglish(complaintData.rawComplaint || ''),
+    complaintDetails: convertHindiToEnglish(complaintData.complaintDetails || ''),
+    machineAvailability: complaintData.machineAvailability,
+    serviceDate: complaintData.serviceDate,
+    serviceTime: complaintData.serviceTime,
+    timestamp: complaintData.timestamp || new Date().toISOString(),
+  };
+  
+  console.log(`   ✅ Converted Title: ${sanitized.complaintTitle}`);
+  console.log(`   ✅ Converted SubTitle: ${sanitized.complaintSubTitle}`);
+  console.log(`   ✅ Converted Location: ${sanitized.location}`);
+  
+  return sanitized;
+}
+
+// ======================= DETECT CUSTOMER SPEECH PATTERN =======================
+export function detectCustomerPattern(speech) {
+  if (!speech) return { type: 'unknown', pattern: null, confidence: 0 };
+  
+  const patterns = [];
+  
+  for (const [patternType, regexList] of Object.entries(CUSTOMER_SPEECH_PATTERNS)) {
+    for (const regex of regexList) {
+      if (regex.test(speech)) {
+        patterns.push(patternType);
+        break;
+      }
+    }
+  }
+  
+  return {
+    type: patterns.length > 0 ? patterns[0] : 'unknown',
+    allPatterns: patterns,
+    speech: speech,
+    isNegation: patterns.includes('negation'),
+    hasMultipleProblem: patterns.includes('multipleProblem'),
+    needsTime: patterns.includes('timeNotNow'),
+    anytimeOkay: patterns.includes('anytimeSend'),
+    needsInfo: patterns.includes('needFullInfo'),
+    understood: patterns.includes('understood'),
+  };
+}
+
 
 export { translateHindiToEnglishEnhanced, romanizeDevanagari };
