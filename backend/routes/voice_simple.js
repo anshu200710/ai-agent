@@ -1,14 +1,13 @@
 import express from "express";
 import twilio from "twilio";
 import axios from "axios";
+
 import {
-  extractPincodeV2,
-  isValidPhone,
-  isValidChassis,
-  isValidPincode,
-  convertHindiToEnglish,
-  detectCustomerPattern
-} from '../utils/improved_extraction.js';
+  handleConversationalIntent,
+  handleSilenceOrEmpty,
+  getSmartPrompt,
+  INTENT,
+} from '../utils/conversational_intelligence.js';
 
 const router = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -1045,9 +1044,7 @@ router.post("/", async (req, res) => {
   });
   gather.say(
     { voice: "Polly.Aditi", language: "hi-IN" },
-    "Namaste! Rajesh Motors mein aapka swagat hai. " +
-    "Complaint register karne ke liye ek dabayein. " +
-    "Agent se baat karne ke liye do dabayein."
+    "Namaskar! Aapka Rajesh Motors mein bahut bahut swagat hai. Agar aapki machine mein koi taklif hai aur complaint darz karwani hai, to ek dabayein. Agar aap seedha humare kisi sahayak se baat karna chahte hain, to do dabayein."
   );
 
   res.type("text/xml").send(twiml.toString());
@@ -1067,7 +1064,7 @@ router.post("/process", async (req, res) => {
 
     // Silence / empty input — repeat last question
     if (!SpeechResult && !Digits) {
-      const lastQ = callData.lastQuestion || "Kripya apna jawab bolein.";
+      const lastQ = callData.lastQuestion || "Bhai sahab, zara dobara boliye, main sun raha hoon.";
       ask(twiml, lastQ);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -1086,12 +1083,12 @@ router.post("/process", async (req, res) => {
     ────────────────────────────────────────────────────── */
     if (callData.step === "ivr_menu") {
       if (!Digits) {
-        ask(twiml, "Complaint ke liye ek dabayein. Agent ke liye do.");
+        ask(twiml, "Bhai sahab, complaint ke liye ek dabayein, aur seedha baat karne ke liye do dabayein.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
       if (Digits === "2") {
-        twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Theek hai. Ek agent se connect kar rahe hain. Kripya ruke.");
+        twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Ji bilkul. Hum aapko abhi humare sahayak se jod rahe hain. Thodi der ruke, aapka kaam zaroor hoga.");
         twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
         activeCalls.delete(CallSid);
         return res.type("text/xml").send(twiml.toString());
@@ -1100,12 +1097,12 @@ router.post("/process", async (req, res) => {
         callData.step = "ask_machine_no";
         callData.retries = 0;
         callData.partialMachineNo = "";
-        callData.lastQuestion = "Theek hai. Apna machine number boliye. Aap dhire dhire ek ek karke bol sakte hain.";
+        callData.lastQuestion = "Theek hai ji. Pehle aapki machine ka number chahiye. Machine par ek number likha hota hai, woh dhire dhire ek ek karke boliye. Jaise: teen, paanch, do, saat. Koi jaldi nahi hai, aaram se boliye.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-      ask(twiml, "Galat input. Complaint ke liye ek, agent ke liye do dabayein.");
+      ask(twiml, "Maafi chahta hoon, yeh button nahi mila. Complaint ke liye ek dabayein, baat ke liye do dabayein.");
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -1173,9 +1170,9 @@ router.post("/process", async (req, res) => {
             return res.type("text/xml").send(twiml.toString());
           }
           const noDigitHints = [
-            "Sirf numbers boliye. Jaise: teen teen shunya paanch chaar chaar saat.",
-            "Machine par jo number likha hai, woh ek ek karke boliye.",
-            "Hindi mein bhi bol sakte hain: ek, do, teen, chaar..."
+            "Bhai sahab, sirf number boliye. Jaise: teen, teen, shunya, paanch, chaar, chaar, saat. Ek ek karke boliye.",
+            "Machine par ek plate lagti hai jis par number likha hota hai. Usi number ko ek ek digit karke boliye.",
+            "Koi baat nahi, aaram se boliye. Hindi mein bhi bol sakte hain — ek, do, teen, chaar, paanch, chhah, saat, aath, nau, shunya."
           ];
           callData.lastQuestion = noDigitHints[Math.min(callData.retries - 1, 2)];
           askNumber(twiml, callData.lastQuestion);
@@ -1211,9 +1208,7 @@ router.post("/process", async (req, res) => {
         callData.step                = "confirm_customer";
         callData.retries             = 0;
         const readable = matchedCandidate.split('').join(' ');
-        callData.lastQuestion = `Bahut achha! Machine number ${readable} mila. ` +
-          `Naam: ${validResult.data.name}, City: ${validResult.data.city}. ` +
-          `Kya yeh aapki machine hai?`;
+        callData.lastQuestion = `Bahut shukriya! Machine number ${readable} humne dhoondh liya. Naam hai ${validResult.data.name}, aur city hai ${validResult.data.city}. Kya yeh aapki hi machine hai? Haan ya nahi boliye.`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1236,9 +1231,9 @@ router.post("/process", async (req, res) => {
       callData.machineNoFreshStart = true;   // ← key flag: don't blend next turn's digits with old buffer
 
       const retryMessages = [
-        `${triedDisplay} — yeh number hamare system mein nahi mila. Kripya machine par likha number dobara ek ek digit karke boliye.`,
-        `Abhi bhi match nahi mila. Documents dekh kar poora number ek sath boliye. Jaise: 3 3 0 5 4 4 7.`,
-        `Ek aur baar try karein. Number dhire aur clearly boliye, bich mein ruk sakte hain.`
+        `${triedDisplay} — yeh number humhare record mein nahi hai ji. Machine par jo number likha hai, woh dobara ek ek digit karke boliye. Koi jaldi nahi.`,
+        `Abhi bhi match nahi hua ji. Apne kagaz ya bill mein dekh kar poora number ek saath boliye. Jaise: teen, teen, shunya, paanch, chaar, saat.`,
+        `Ek baar aur try karte hain. Number bahut dhire aur clearly boliye, bich mein ruk sakte hain, main sun raha hoon.`
       ];
       callData.lastQuestion = retryMessages[Math.min(callData.retries - 1, 2)];
       askNumber(twiml, callData.lastQuestion);
@@ -1270,7 +1265,7 @@ router.post("/process", async (req, res) => {
         callData.retries          = 0;
         callData.partialMachineNo = "";
         callData.machineNoFreshStart = true;
-        callData.lastQuestion     = "Theek hai. Phir se machine number boliye — ek ek digit clearly.";
+        callData.lastQuestion     = "Koi baat nahi ji. Machine ka sahi number dobara boliye — ek ek digit clearly boliye.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1282,12 +1277,12 @@ router.post("/process", async (req, res) => {
         // Assume correct and move on — don't keep customer waiting
         callData.step    = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = `Theek hai. Machine kaunse city mein hai abhi?`;
+        callData.lastQuestion = `Theek hai ji. Aapki machine abhi kis shehar mein hai?`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-      callData.lastQuestion = `${name} ji, kya yeh aapki machine hai? Haan ya nahi boliye.`;
+      callData.lastQuestion = `[Name] ji, kya yeh aapki apni machine hai? Haan boliye agar sahi hai, nahi boliye agar galat hai.`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -1305,12 +1300,12 @@ router.post("/process", async (req, res) => {
           callData.city    = callData.customerData?.city || "NA";
           callData.step    = "ask_engineer_location";
           callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Engineer kahan aaye? Service center ka naam ya address batayein.";
+          callData.lastQuestion = "Theek hai ji. Ab yeh batayein ki engineer kahan aaye? Koi shehar, workshop, ya jagah ka naam boliye.";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        ask(twiml, "City ka naam batayein. Jaise: Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara.");
+        ask(twiml, "Shehar ka naam boliye ji. Jaise Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya Bhilwara — kaunse shehar mein machine hai?");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -1384,7 +1379,7 @@ router.post("/process", async (req, res) => {
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        ask(twiml, "Machine kahan rakhhi hai? City, area, workshop, ya landmark boliye. Jaise: Jaipur workshop, Tonk gaon, etc.");
+        ask(twiml, "Bhai sahab, machine abhi kahan rakhhi hai? Shehar ka naam, workshop, khet, ya koi bhi jagah boliye. Jaise Jaipur workshop, Tonk gaon, Kota bypass — kuch bhi.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -1407,7 +1402,7 @@ router.post("/process", async (req, res) => {
         
         console.log(`   📍 Populated: Branch=${callData.branch}, Outlet=${callData.outlet}, City_ID=${callData.city_id}`);
         
-        // Move to next step — NO CONFIRMATION
+        // Move to next step – NO CONFIRMATION
         callData.step         = "ask_phone";
         callData.lastQuestion = _buildPhoneQuestion(callData);
         askNumber(twiml, callData.lastQuestion);
@@ -1457,8 +1452,7 @@ router.post("/process", async (req, res) => {
         callData.partialPhoneNo = "";
         callData.step           = "ask_complaint";
         callData.retries        = 0;
-        callData.lastQuestion   = "Bilkul! Ab batayein — machine mein kya problem ho rahi hai? " +
-          "Sab problems ek saath bata sakte hain. Engine, hydraulic, brake, gear, AC — kuch bhi.";
+        callData.lastQuestion   = "Bahut achha ji! Ab mujhe batayein — machine mein kya taklif ho rahi hai? Engine, hydraulic, brake, gear, AC — jo bhi dikkat hai, detail mein batayein. Main dhyan se sun raha hoon.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1467,7 +1461,7 @@ router.post("/process", async (req, res) => {
       // Customer rejects known phone with no digits — collect new number
       if (isNegative(rawSpeech) && callData.partialPhoneNo === "" && knownPhone && knownPhone !== "Unknown") {
         callData.partialPhoneNo = "";
-        callData.lastQuestion   = "Theek hai. Apna sahi phone number boliye ek ek digit karke.";
+        callData.lastQuestion   = "Theek hai ji. Apna sahi phone number boliye. Ek ek digit karke boliye, jaldi nahi hai.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1488,7 +1482,7 @@ router.post("/process", async (req, res) => {
         callData.step           = "confirm_phone";
         callData.retries        = 0;
         const readable = phone.split('').join(' ');
-        callData.lastQuestion   = `Phone number hai: ${readable}. Sahi hai?`;
+        callData.lastQuestion   = `Aapka phone number hai: ${readable}. Kya yeh bilkul sahi hai? Haan ya nahi boliye.`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1496,7 +1490,7 @@ router.post("/process", async (req, res) => {
 
       if (accumulated.length > 0 && accumulated.length < 10) {
         const readable = accumulated.split('').join(' ');
-        callData.lastQuestion = `${readable} — ab baaki digits boliye.`;
+        callData.lastQuestion = `${readable} — aaya ji. Ab baaki ke number bhi boliye.`;
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1509,14 +1503,14 @@ router.post("/process", async (req, res) => {
         callData.partialPhoneNo = "";
         callData.step           = "ask_complaint";
         callData.retries        = 0;
-        callData.lastQuestion   = "Theek hai. Ab machine ki problem batayein.";
+        callData.lastQuestion   = "Koi baat nahi ji. Ab machine ki taklif batayein — kya problem hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
       callData.lastQuestion = knownPhone && knownPhone !== "Unknown"
-        ? `Kya ${knownPhone.split('').join(' ')} sahi number hai? Haan ya nahi?`
-        : "Phone number ek ek digit boliye.";
+        ? `Ji, humhare paas aapka number ${knownPhone.split('').join(' ')} hai. Kya yeh sahi hai? Haan ya nahi boliye.`
+        : "Bhai sahab, apna mobile number boliye. Ek ek digit karke.";
       askNumber(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -1529,8 +1523,7 @@ router.post("/process", async (req, res) => {
       if (isAffirmative(rawSpeech)) {
         callData.step    = "ask_complaint";
         callData.retries = 0;
-        callData.lastQuestion = "Bilkul! Ab mujhe batayein — machine mein kya problem ho rahi hai? " +
-          "Engine, hydraulic, brake, gear, AC — detail mein batayein.";
+        callData.lastQuestion = "Bahut achha ji! Ab mujhe batayein — machine mein kya taklif ho rahi hai? Engine, hydraulic, brake, gear, AC — jo bhi dikkat hai, detail mein batayein. Main dhyan se sun raha hoon.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1539,7 +1532,7 @@ router.post("/process", async (req, res) => {
         callData.partialPhoneNo = "";
         callData.step    = "ask_phone";
         callData.retries = 0;
-        callData.lastQuestion   = "Theek hai. Dobara phone number boliye.";
+        callData.lastQuestion   = "Theek hai ji. Koi baat nahi. Apna sahi number dobara boliye, main likh leta hoon.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1548,12 +1541,12 @@ router.post("/process", async (req, res) => {
       if (callData.retries >= 3) {
         callData.step    = "ask_complaint";
         callData.retries = 0;
-        callData.lastQuestion = "Theek hai. Ab problem batayein.";
+        callData.lastQuestion = "Theek hai ji. Ab batayein — machine mein kya problem hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-      ask(twiml, "Haan ya nahi boliye.");
+      ask(twiml, "Bhai sahab, bas haan ya nahi boliye — number sahi hai ki nahi?");
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -1569,16 +1562,16 @@ router.post("/process", async (req, res) => {
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 5) {
-          twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Samajh nahi aaya. Agent se connect kar rahe hain.");
+          twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Bhai sahab, aawaz thodi saaf nahi aayi. Koi baat nahi, hum aapko hamare sahayak se jod dete hain. Woh aapki poori madad karenge.");
           twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
           activeCalls.delete(CallSid);
           return res.type("text/xml").send(twiml.toString());
         }
         const nudges = [
-          "Machine mein kya problem ho rahi hai? Engine, brake, hydraulic, gear — kuch bhi batayein.",
-          "Theek se boliye — machine kya kar rahi hai ya kya nahi kar rahi?",
-          "Koi avaz aa rahi? Machine chalu nahi ho rahi? Ya kuch aur?",
-          "Engine, gear, brake, hydraulic, AC — kahan problem hai? Sab ek saath bata sakte hain."
+          "Shukriya ji! Ab mujhe batayein ki machine mein kya taklif ho rahi hai. Sab problems ek saath bata sakte hain — engine, hydraulic, brake, gear, AC — jo bhi pareshani hai, khulke boliye.",
+          "Bhai sahab, machine mein kya taklif hai? Engine, brake, hydraulic, gear — jo bhi dikkat hai, batayein.",
+          "Thodi aur jaankari dijiye — machine kya kar rahi hai ya kya nahi kar rahi? Khulke boliye.",
+          "Koi awaaz aa rahi hai? Machine chalu nahi ho rahi? Ya koi aur problem hai? Bata dijiye."
         ];
         ask(twiml, nudges[Math.min(callData.retries - 1, nudges.length - 1)]);
         activeCalls.set(CallSid, callData);
@@ -1612,7 +1605,7 @@ router.post("/process", async (req, res) => {
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        callData.lastQuestion = "Aur thoda detail mein batayein. Machine ka kaunsa hissa kharab hai ya kaunsi avaz aa rahi hai?";
+        callData.lastQuestion = "Zara aur detail mein batayein ji — machine ka kaunsa hissa theek nahi hai, ya kaunsi awaaz aa rahi hai? Main samajhna chahta hoon.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -1657,7 +1650,7 @@ router.post("/process", async (req, res) => {
   } catch (error) {
     console.error("❌ FATAL Error:", error);
     const twiml = new VoiceResponse();
-    twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Kshama karein, ek technical problem aayi. Agent se connect kar rahe hain.");
+    twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Ji, thodi technical dikkat aa gayi. Koi baat nahi, hum aapko hamare sahayak se jod dete hain. Woh aapki madad zaroor karenge.");
     twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
     return res.type("text/xml").send(twiml.toString());
   }
@@ -1668,10 +1661,9 @@ function _buildPhoneQuestion(callData) {
   const knownPhone = callData.customerData?.phone;
   if (knownPhone && knownPhone !== "Unknown") {
     const readable = knownPhone.split('').join(' ');
-    return `Aapka phone number jo humhare paas register hai woh hai: ${readable}. ` +
-      `Kya yeh sahi hai? Agar haan to haan boliye, agar nahi to sahi number boliye.`;
+    return `Ji, humhare paas aapka ek number pehle se hai — ${readable}. Kya is number par hum aapse sampark kar sakte hain? Agar haan to haan boliye, agar koi aur number dena ho to woh boliye.`;
   }
-  return "Apna phone number boliye. Ek ek digit clearly boliye.";
+  return "Bhai sahab, apna mobile number boliye jis par hum aapko sampark kar sakein. Ek ek digit karke boliye, koi jaldi nahi.";
 }
 
 /**
@@ -1711,14 +1703,7 @@ function _buildSummary(callData) {
   const phoneReadable   = (phone   !== "N/A") ? phone.split('').join(' ')   : phone;
 
   return (
-    `Theek hai! Ab main aapki details confirm karta hoon. ` +
-    `Naam: ${name}. ` +
-    `Machine number: ${chassisReadable}. ` +
-    `City: ${city}. ` +
-    `Engineer address: ${location}. ` +
-    `Phone: ${phoneReadable}. ` +
-    `Problems: ${complaintText}. ` +
-    `Kya sab sahi hai? Haan boliye to complaint register kar deta hoon.`
+    `Theek hai ji! Main aapki saari jaankari ek baar bata deta hoon. Naam: ${name}. Machine number: ${chassisReadable}. Shehar: ${city}. Engineer ki jagah: ${location}. Phone number: ${phoneReadable}. Taklif: ${complaintText}. Kya sab sahi hai? Haan boliye aur main aapki complaint abhi darz kar deta hoon.`
   );
 }
 
@@ -1747,17 +1732,12 @@ async function _submitAndClose(twiml, callData, CallSid) {
   if (result.success && result.sapId) {
     twiml.say(
       { voice: "Polly.Aditi", language: "hi-IN" },
-      `Bilkul sahi! Aapki complaint successfully register ho gayi. ` +
-      `Aapka complaint number hai: ${result.sapId.toString().split('').join(' ')}. ` +
-      `Hamara engineer jald aapko contact karega. ` +
-      `Rajesh Motors mein call karne ke liye dhanyavaad. Namaste!`
+      `Bahut shukriya ji! Aapki complaint hamare system mein darz ho gayi hai. Aapka complaint number hai: ${result.sapId.toString().split('').join(' ')}. Yeh number sambhal kar rakhe, kaam aayega. Hamare engineer jald hi aapko call karenge aur ghar aakar machine theek kar denge. Rajesh Motors mein call karne ka shukriya. Aapka din shubh rahe. Namaskar!`
     );
   } else {
     twiml.say(
       { voice: "Polly.Aditi", language: "hi-IN" },
-      `Shukriya! Aapki complaint register ho gayi hai. ` +
-      `Hamari team aapko jald contact karegi. ` +
-      `Rajesh Motors mein call karne ke liye dhanyavaad. Namaste!`
+      `Bahut shukriya ji! Aapki complaint humne darz kar li hai. Hamari team jald hi aapko call karegi aur aapki machine theek karegi. Rajesh Motors mein call karne ka shukriya. Aapka din shubh rahe. Namaskar!`
     );
   }
 

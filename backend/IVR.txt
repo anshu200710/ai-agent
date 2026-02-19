@@ -1,19 +1,13 @@
 import express from "express";
 import twilio from "twilio";
 import axios from "axios";
-import Complaint from "../models/Complaint.js";
 import {
-  extractPhoneNumberV2,
-  extractChassisNumberV2,
-  extractNameV2,
   extractPincodeV2,
-  extractLocationAddressV2,
-  extractTimeV2,
   isValidPhone,
   isValidChassis,
-  isValidName,
-  isValidAddress,
-  isValidPincode
+  isValidPincode,
+  convertHindiToEnglish,
+  detectCustomerPattern
 } from '../utils/improved_extraction.js';
 
 const router = express.Router();
@@ -22,1392 +16,1012 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
-//const EXTERNAL_API_BASE = "http://192.168.0.90/jcbServiceEnginerAPIv7";
-//const COMPLAINT_API_URL = "http://192.168.0.90/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://192.168.1.92/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://192.168.1.92/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
-/* ======================= AFFIRMATIVE KEYWORDS ======================= */
-const affirmativeKeywords = [
-  'हान', 'हां', 'हाँ', 'हम', 'जी', 'सही', 'ठीक', 'बिल्कुल', 'ठीक है', 'सही है',
-  'जी हां', 'जी हाँ', 'हां जी', 'हाँ जी', 'बिल्कुल सही', 'जी सर', 'जी मैडम',
-  'अच्छा', 'ओके', 'करो', 'कीजिए', 'ठीक रहेगा', 'चलेगा', 'हो गया',
-  'yes', 'yep', 'yeah', 'yup', 'sure', 'correct', 'right', 'ok', 'okay',
-  'fine', 'good', 'ji', 'sahi', 'theek', 'thik', 'bilkul', 'haan', 'han',
-  'absolutely', 'definitely', 'affirmative'
+/* ======================= SERVICE CENTER LOCATIONS DATABASE ======================= */
+const SERVICE_CENTERS = [
+  { id: 1, city_name: "AJMER", branch_name: "AJMER", branch_code: "1", lat: 26.434888840, lng: 74.698112488, city_add: "F-100, Road No. 5, Riico Industrial Area, Near Power House, Palra, Ajmer", is_active: 1 },
+  { id: 2, city_name: "ALWAR", branch_name: "ALWAR", branch_code: "2", lat: 27.582258224, lng: 76.647377014, city_add: "Khasra no. 2345, Tuleda Bye Pass, Alwar Bhiwadi Highway Alwar-301001", is_active: 1 },
+  { id: 3, city_name: "BANSWARA", branch_name: "UDAIPUR", branch_code: "7", lat: 23.563598633, lng: 74.417541504, city_add: "Near Nayak Hotel, Udaipur - Dungarpur Link Road, Banswara-327001", is_active: 1 },
+  { id: 4, city_name: "BHARATPUR", branch_name: "ALWAR", branch_code: "2", lat: 27.201648712, lng: 77.462951660, city_add: "Kurka house,Sewar road,Near Jain Mandir,Bharatpur (Raj.)", is_active: 1 },
+  { id: 5, city_name: "BHILWARA", branch_name: "BHILWARA", branch_code: "3", lat: 25.374652863, lng: 74.623023987, city_add: "Kundan Complex, Sukhadiya Circle, Near Bewar Booking, Ajmer Road, Bhilwara", is_active: 1 },
+  { id: 6, city_name: "BHIWADI", branch_name: "ALWAR", branch_code: "2", lat: 28.202623367, lng: 76.808448792, city_add: "Rajesh Motors (Raj.) Pvt. Ltd.,  Near Hutch Tower, Alwar Bye pass road, Bhiwadi, Distt. Alwar, (Raj.)", is_active: 1 },
+  { id: 7, city_name: "DAUSA", branch_name: "JAIPUR", branch_code: "4", lat: 26.905101776, lng: 76.370185852, city_add: "Opp. Anand Goods transport co.Near Saras  Dairy Plant,  Agra By Pass, N.H-11,  Dausa -303303", is_active: 1 },
+  { id: 8, city_name: "DHOLPUR", branch_name: "ALWAR", branch_code: "2", lat: 26.693515778, lng: 77.876922607, city_add: "Bharatpur Road, Layania Marriage Home, Dholpur", is_active: 1 },
+  { id: 9, city_name: "DUNGARPUR", branch_name: "UDAIPUR", branch_code: "7", lat: 23.844612122, lng: 73.737922668, city_add: "T.P.Complex Shopno 1-2 Nr. Reliance Petrol Pump , Sagwara Road, Dunagarpur", is_active: 1 },
+  { id: 10, city_name: "GONER ROAD", branch_name: "JAIPUR", branch_code: "4", lat: 26.889762878, lng: 75.873939514, city_add: "72, Goner Turn, Agra Road, Jaipur-302004, Rajasthan.", is_active: 1 },
+  { id: 11, city_name: "JAIPUR", branch_name: "JAIPUR", branch_code: "4", lat: 26.865495682, lng: 75.681541443, city_add: "Khasra No. 1170-1175, Near Delhi Public School, Bhankrota, Ajmer Road, Jaipur, Rajasthan - 302026", is_active: 1 },
+  { id: 12, city_name: "JHALAWAR", branch_name: "KOTA", branch_code: "5", lat: 24.547901154, lng: 76.194129944, city_add: "Opp. Roop Nagar Colony, Kota Road, Jhalawar", is_active: 1 },
+  { id: 13, city_name: "JHUNJHUNU", branch_name: "SIKAR", branch_code: "6", lat: 28.098627090, lng: 75.374809265, city_add: "Opp. Police Line, Near Railway Crossing , Phase-2,Riico, Jhunjhunu", is_active: 1 },
+  { id: 14, city_name: "KARAULI", branch_name: "JAIPUR", branch_code: "4", lat: 26.512748718, lng: 77.021934509, city_add: "Infront of S.P. Office, Shukla Colony Corner, Mandrayal Road, Karauli", is_active: 1 },
+  { id: 15, city_name: "KEKRI", branch_name: "AJMER", branch_code: "1", lat: 25.961145401, lng: 75.157318115, city_add: "Ajmer Road, Near Peer Baba, Near R.T.O.Office, Kekri-305404", is_active: 1 },
+  { id: 16, city_name: "KOTA", branch_name: "KOTA", branch_code: "5", lat: 25.129093170, lng: 75.868736267, city_add: "B -259, Ipia Road No-06, Near Railway Flyover, Kota", is_active: 1 },
+  { id: 17, city_name: "KOTPUTLI", branch_name: "JAIPUR", branch_code: "4", lat: 27.680557251, lng: 76.160636902, city_add: "C/o Old Vijay Automobile N.H.8,Teh. Kotputli, Distt. Jaipur (Raj.)", is_active: 1 },
+  { id: 18, city_name: "NEEM KA THANA", branch_name: "JAIPUR", branch_code: "4", lat: 27.741991043, lng: 75.788673401, city_add: "Opp. Jodla Johra, Neem Ka Thana, Dist. Sikar", is_active: 1 },
+  { id: 19, city_name: "NIMBAHERA", branch_name: "BHILWARA", branch_code: "3", lat: 24.617570877, lng: 74.672302246, city_add: "Near Mahaveer Rastaurant,Eidgah Chauraha, Udaipur Road , Nimbahera-312602", is_active: 1 },
+  { id: 20, city_name: "PRATAPGARH", branch_name: "BHILWARA", branch_code: "3", lat: 24.038845062, lng: 74.776138306, city_add: "Ambedkar Circle, Near Anand Service Centre, Opp. Bank Of India, Pratapgarh", is_active: 1 },
+  { id: 21, city_name: "RAJSAMAND", branch_name: "UDAIPUR", branch_code: "7", lat: 25.078897476, lng: 73.866836548, city_add: "Near Indusind Bank Ltd. Tvs Chouraha, Shrinath Hotel, Kankroli, Rajsamand", is_active: 1 },
+  { id: 22, city_name: "RAMGANJMANDI", branch_name: "KOTA", branch_code: "5", lat: 24.655239105, lng: 75.971496582, city_add: "Near Reliance Petrol Pump, Suket Road, Ramganj Mandi.", is_active: 1 },
+  { id: 23, city_name: "SIKAR", branch_name: "SIKAR", branch_code: "6", lat: 27.591619492, lng: 75.171058655, city_add: "Opp. Parnami Motors, Near Circuit House,Jaipur Road , Sikar", is_active: 1 },
+  { id: 25, city_name: "SUJANGARH", branch_name: "SIKAR", branch_code: "6", lat: 27.706758499, lng: 74.481445312, city_add: "Opp.krishi upaj mandi, salasar road, sujangarh, Distt. Churu PIN:331507", is_active: 1 },
+  { id: 26, city_name: "TONK", branch_name: "JAIPUR", branch_code: "4", lat: 26.177381516, lng: 75.810867310, city_add: "Plot No.5, Captain Colony, Jaipur Road, Tonk, Distt.Tonk (Raj.)", is_active: 1 },
+  { id: 27, city_name: "UDAIPUR", branch_name: "UDAIPUR", branch_code: "7", lat: 24.570493698, lng: 73.745994568, city_add: "A – 83, Road No. 1, Mewar Industrial Area, Madri, Udaipur (Raj.)", is_active: 1 },
+  { id: 28, city_name: "VKIA", branch_name: "JAIPUR", branch_code: "4", lat: 27.0103827, lng: 75.7703344, city_add: "2nd Rd, New Karni Colony, Kishan Vatika, Ganesh Nagar, Jaipur, Rajasthan 302013", is_active: 1 },
 ];
 
-/* ======================= NEGATIVE KEYWORDS ======================= */
-const negativeKeywords = [
-  'नहीं', 'नही', 'ना', 'नाह', 'न', 'नाय', 'गलत', 'गलत है', 'ऐसी नहीं',
-  'ये नहीं', 'यह नहीं', 'नकार', 'मत', 'मत करो', 'रहने दो', 'जरूरत नहीं',
-  'ठीक नहीं', 'सही नहीं', 'बिल्कुल नहीं',
-  'no', 'nope', 'nah', 'na', 'not', 'dont', "don't", 'never', 'negative',
-  'wrong', 'incorrect', 'galat', 'nai', 'nei'
-];
-
-/* ======================= UNCERTAINTY KEYWORDS ======================= */
-const uncertaintyKeywords = [
-  'पता नहीं', 'पता नही', 'पता न', 'मुझे पता नहीं', 'मुझे नहीं पता',
-  'पता नईं', 'पता नई', 'मालूम नहीं', 'मालूम नही', 'नहीं मालूम',
-  'मालूम नईं', 'जानकारी नहीं',
-  'याद नहीं', 'याद नही', 'नहीं याद', 'याद न', 'याद नईं',
-  'भूल गया', 'भूल गयी', 'भूल गए', 'भूल गई', 'याद नहीं आ रहा',
-  'समझ नहीं', 'समझ नही', 'नहीं समझ आ रहा', 'समझ नहीं आया',
-  'समझ नईं आया', 'समझ में नहीं आया',
-  'जानता नहीं', 'जानता नही', 'जानती नहीं', 'मैं नहीं जानता',
-  'मैं नहीं जानती', 'हमें नहीं पता', 'कोई विचार नहीं', 'कोई आइडिया नहीं',
-  'अंदाजा नहीं', 'क्लू नहीं',
-  'dont know', 'do not know', "don't know", 'dunno', 'no idea', 'no clue',
-  'not sure', 'uncertain', 'forget', 'forgot', 'forgotten', "can't remember",
-  'cant remember', 'not certain', 'confused'
-];
-
-/* ======================= CONTROL KEYWORDS ======================= */
-const repeatKeywords = [
-  'repeat', 'dobara', 'fir se', 'phir se', 'kya', 'kya kaha',
-  'dubara', 'again', 'once more', 'samjha nahi'
-];
-
-const pauseKeywords = [
-  'ruko', 'ruk', 'ek minute', 'ek min', 'i mean', 'matlab',
-  'ruk jao', 'hold', 'thoda ruk'
-];
-
-function isRepeatRequest(text) {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return repeatKeywords.some(k => lower.includes(k));
-}
-
-function isPauseRequest(text) {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return pauseKeywords.some(k => lower.includes(k));
-}
-
-/* ======================= MACHINE TYPE KEYWORDS ======================= */
-const machineTypeKeywords = {
-  'Warranty': [
-    'वारंटी', 'warranty', 'वारेंटी', 'वॉरंटी', 'गारंटी', 'guarantee',
-    'free', 'फ्री', 'मुफ्त', 'warranty mein', 'warranty में'
-  ],
-  'JCB Care': [
-    'जीसीबी केयर', 'jcb care', 'केयर', 'care', 'jcb केयर', 'जेसीबी केयर',
-    'annual', 'yearly', 'साल', 'वार्षिक'
-  ],
-  'Engine Care': [
-    'इंजन केयर', 'engine care', 'इंजीन केयर', 'engine का केयर',
-    'engine protection', 'इंजन प्रोटेक्शन'
-  ],
-  'Demo': [
-    'डेमो', 'demo', 'डेमो मशीन', 'demonstration', 'test machine',
-    'टेस्ट', 'परीक्षण'
-  ],
-  'BHL': [
-    'बीएचएल', 'bhl', 'backhoe', 'बैकहो', 'back hoe', 'backhoe loader'
-  ]
+/* ======================= DIGIT WORD MAP (Hindi + English + Hinglish) ======================= */
+const DIGIT_WORD_MAP = {
+  // Hindi
+  'शून्य': '0', 'सुन्य': '0', 'सून्य': '0', 'जीरो': '0', 'जीरों': '0',
+  'एक': '1',  'इक': '1', 'एक्क': '1',
+  'दो': '2',  'दो ': '2',
+  'तीन': '3', 'तिन': '3', 'टीन': '3',
+  'चार': '4', 'चार्स': '4',
+  'पाँच': '5','पांच': '5','पाच': '5', 'पंच': '5',
+  'छह': '6',  'छः': '6',  'छ': '6',  'छे': '6', 'छ्ह': '6',
+  'सात': '7', 'साथ': '7',
+  'आठ': '8',  'अठ': '8',
+  'नौ': '9',  'नो': '9',  'नव': '9',
+  // English
+  'zero': '0','oh': '0','o': '0',
+  'one': '1',
+  'two': '2', 'to': '2',
+  'three': '3',
+  'four': '4','for': '4',
+  'five': '5',
+  'six': '6',
+  'seven': '7',
+  'eight': '8','ate': '8',
+  'nine': '9',
+  // Hinglish
+  'ek': '1',
+  'do': '2',
+  'teen': '3','tin': '3',
+  'char': '4','chaar': '4',
+  'panch': '5','paanch': '5',
+  'chhah': '6','chhe': '6','chheh': '6',
+  'saat': '7','sat': '7',
+  'aath': '8','ath': '8',
+  'nau': '9', 'nao': '9',
 };
 
-/* ======================= MACHINE STATUS KEYWORDS ======================= */
+/* ---- NOISE WORDS TO IGNORE when extracting digits ---- */
+const IGNORE_WORDS = new Set([
+  'mera','meri','mere','mera','hamara','hamaara',
+  'number','no','num','n','nmbr',
+  'machine','chassis','engine',
+  'hai','hain','he','ha','h',
+  'ka','ki','ke','ko','se','par','pe',
+  'aapka','apna','mhara','mharo',
+  'phone','mobile','contact','call',
+  'batata','bata','bolunga','bolunga',
+  'yeh','ye','yahi','vo','wo',
+  'aur','bhi','sirf','bas',
+  'the','a','an','is','and','or','my','your',
+  'okay','ok','theek','thik','haan','ji','yes',
+  'नंबर','नम्बर','मशीन','मेरा','मेरी','मेरे','आपका','आपकी',
+  'फ़ोन','मोबाइल','है','हैं','का','की','के','को','से',
+]);
+
+/**
+ * extractOnlyDigits — core number extractor
+ * Handles: raw digits, spoken Hindi/English/Hinglish words, mixed input
+ * Ignores noise context words ("mera number", "machine ka", etc.)
+ *
+ * KEY FIX: "दो" / "do" is only treated as digit 2 when it appears
+ * in a purely numeric context (surrounded by other digit words/numbers).
+ * In verb phrases like "सेव कर दो", "बता दो", "कर लो" — it is noise.
+ */
+function extractOnlyDigits(text) {
+  if (!text) return '';
+  const processed = text.toLowerCase().replace(/[।,!?;|]/g, ' ');
+
+  // ── Strip verb-suffix phrases that contain "do/दो" or "lo/ले" ──
+  // e.g. "kar do", "bata do", "de do", "kar lo", "le lo", "save kar do"
+  const verbNoise = processed
+    .replace(/\b(kar|karo|karke|karein|bata|bolo|dedo|de|save|sev|chalao|chalana|chalte|ruk|ruko|sun|suno|lelo|le)\s+(do|दो|lo|लो|dena|लेना|देना)\b/gi, ' ')
+    .replace(/\b(do|दो)\s+(baar|bar|minute|min|second|sec)\b/gi, ' ');  // "do baar" = twice, not digit
+
+  const tokens = verbNoise.split(/[\s\-\/]+/).filter(t => t.length > 0);
+  let result = '';
+
+  for (const token of tokens) {
+    if (IGNORE_WORDS.has(token)) continue;
+    if (/^\d+$/.test(token)) {
+      result += token;
+    } else if (DIGIT_WORD_MAP[token] !== undefined) {
+      result += DIGIT_WORD_MAP[token];
+    }
+  }
+  return result;
+}
+
+/**
+ * extractPhoneDigits — same as extractOnlyDigits, used for phone numbers.
+ * Extra safety: if result is less than 4 digits, return empty string
+ * (avoids accepting stray "2" from noise phrases as partial phone).
+ */
+function extractPhoneDigits(text) {
+  const digits = extractOnlyDigits(text);
+  // Single stray digit from noise (e.g. "कर दो" → "2") — discard
+  if (digits.length < 2) return '';
+  return digits;
+}
+
+/* ======================= KEYWORDS ======================= */
+const affirmativeKeywords = [
+  // Hindi — Simple & clear affirmations
+  'हान','हां','हाँ','जी','सही','ठीक','बिल्कुल','ठीक है','सही है',
+  // Hindi — With pronouns (I, my, me context)
+  'हा मैं हूँ','हा मेरी है','हा मेरा है','हाँ मेरी','हाँ मेरा','हाँ मेरे','मेरी है','मेरा है',
+  'हा मुझे ठीक','मुझे ठीक','मुझे सही','मुझे ये','मैं ठीक हूँ','मैं सही हूँ','main theek hun',
+  // Standard affirmations
+  'जी हां','जी हाँ','हां जी','हाँ जी','बिल्कुल सही','जी सर','जी मैडम','जी भैया','जी दीदी',
+  'अच्छा','ओके','ठीक रहेगा','चलेगा','हो गया','माना','दिया','करो','कर दो',
+  'सही है','ठीक है','बराबर है','दर्ज करो','दर्ज कर','रजिस्टर करो',
+  'चल','चल जाओ','ठीक चल','चलता है','ठीक ठाक','सब ठीक','सब सही',
+  'बढ़िया','शानदार','परफेक्ट','एक्जैक्टली','बिल्कुल वो ही','वही है',
+  'हा से','हाँ से','ये सही है','ये ठीक है','समझ गया','ठीक हो गया',
+  'आप बोलो','आप करो','आप ही करो','तुम ही करो','दे दो','दे दीजिए',
+  'ले लो','ले लीजिए','ले जाओ','रख लो','रख दो',
+  // Hinglish / English — affirmations
+  'yes','yep','yeah','yup','sure','correct','right','ok','okay','okey',
+  'fine','good','ji','sahi','theek','thik','bilkul','haan','han','h','hn',
+  'absolutely','definitely','affirmative','confirmed','agreed','accepted',
+  'sounds good','all good','that works','that is right','that is correct',
+  'kar do','save karo','register karo','darz karo','likh lo','kar le',
+  'proceed','go ahead','let\'s do it','let\'s go','keep going','move on',
+  'main theek','main ready','i am ready','i am good','i am fine',
+  'my number','my address','my city','my name',
+];
+
+const negativeKeywords = [
+  // Hindi — Simple negations
+  'नहीं','नही','ना','नाह','न','गलत','गलत है',
+  // Hindi — With pronouns (Me/My/I context)
+  'मेरा नहीं','मेरी नहीं','मेरे नहीं','मेरी नही','मेरा नही','मुझे नहीं','मुझे नही',
+  'मैं नहीं','मैं नही','मुझे ये नहीं','मेरा नहीं है','ये मेरा नहीं',
+  'मतलब नहीं','मतलब नही','मैं मतलब नहीं','यह नहीं','ये नहीं',
+  // Standard negations
+  'ये नहीं','यह नहीं','वह नहीं','ये गलत','ये सही नहीं','यह सही नहीं',
+  'मत','मत करो','मत दो','नहीं करो','मत हो','नहीं होगा','नहीं होना',
+  'रहने दो','रहने दीजिए','जाने दो','जाने दीजिए','छोड़ दो',
+  'जरूरत नहीं','जरूरत नही','जरा नहीं','बिल्कुल नहीं','कतई नहीं','कभी नहीं',
+  'ठीक नहीं','ठीक नही','सही नहीं','सही नही','बराबर नहीं','बराबर नही',
+  'नहीं भैया','नहीं दीदी','नहीं भैया जी','न भैया','न दीदी','न हीं',
+  'इससे नहीं','इससे नही','इस तरह नहीं','इस तरह नही','इस طा नहीं',
+  'गलत है','बिल्कुल गलत','पूरी गलत','एक दम गलत','सब गलत',
+  'अलग है','भिन्न है','दूसरा है','और कुछ','कुछ और',
+  // Hinglish / English — negations
+  'no','nope','nah','na','not','dont',"don't",'never','negative',
+  'wrong','incorrect','galat','nai','nei','disagree','neither',
+  'not at all','definitely not','absolutely not','surely not','never',
+  'no way','no thanks','no need','not needed','no requirement',
+  'sounds wrong','that is wrong','that is incorrect','that does not work',
+  'my number is not','my address is not','my city is not',
+  'i am not','i am not ready','not ready','not prepared','not confirmed',
+];
+
+// Phrases where "nahi" appears BUT the intent is actually to confirm/accept
+// e.g. "नहीं अब सही है" = "no [nothing more], it's correct now"
+const falseNegativePhrases = [
+  'नहीं अब सही','nahi ab sahi','nahi sahi hai','नहीं बस सही','नहीं ठीक है',
+  'नहीं बस इतना','nahi bas itna','nahi sab theek','नहीं सब ठीक','no sab sahi',
+  'nahi ab theek','नहीं अब ठीक','bas sahi hai','बस सही है','बस ठीक है',
+  'nahi aur kuch nahi','नहीं और कुछ नहीं','bas yahi','बस यही','इतना ही काफी',
+];
+
+/* ─── CLARIFICATION KEYWORDS: Help identify when customer needs re-asking ──── */
+const clarificationKeywords = new Set([
+  'क्या','कि','ये','वो','यह','इस','उस','जो','जहा','कहा',
+  'क्या मतलब','क्या हुआ','किस की','कौन','कहाँ','कब',
+  'what','which','who','where','when','why','how',
+  'क्या सुना','क्या पहचाना','क्या लगा','क्या लगो',
+  'haan but','par','lekin','lekín','but','however',
+  'sort of','kind of','maybe','perhaps','possible',
+])
+
+/**
+ * isFalseNegative — detects phrases that CONTAIN "nahi" but actually mean "done/confirmed"
+ * e.g. "नहीं अब सही है सब कुछ" → customer saying "no [more issues], it's all correct"
+ */
+function isFalseNegative(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return falseNegativePhrases.some(p => t.includes(p.toLowerCase()));
+}
+
+const uncertaintyKeywords = [
+  // Hindi uncertainty
+  'पता नहीं','पता नही','पता न','मुझे पता नहीं','मुझे नहीं पता',
+  'मालूम नहीं','मालूम नही','नहीं मालूम','जानकारी नहीं','जानकारी नही',
+  'याद नहीं','याद नही','नहीं याद','भूल गया','भूल गयी','भूल गये',
+  'समझ नहीं','समझ नही','नहीं समझ आ रहा','समझ नहीं आया','समझ में नहीं',
+  // Uncertainty with pronouns
+  'मेरा पता नहीं','मेरी याद नहीं','मेरे को ख़ैर','मुझे मालूम नहीं','मुझे समझ नहीं',
+  'मैं नहीं जानता','मैं नहीं जानती','मुझे उम्मीद नहीं','मुझे शक है',
+  'क्या पता','क्या जाने','किसे पता','संभव है','हो सकता है','शायद',
+  'मेरा ख्याल','मेरे ख्याल से','मुझे लगता','मेरे ख्याल में',
+  // English uncertainty
+  'dont know','do not know',"don't know",'dunno','no idea','no clue',
+  'not sure','uncertain','unsure','forget','forgot','forgotten',"can't remember",
+  'i think','i guess','maybe','perhaps','probably','possibly','perhaps',
+  'sort of','kind of','like','seems like','appears to be',
+  'i am not sure','i dont remember','i dont think','not sure about',
+  'maybe yes','maybe no','could be','might be',
+];
+
+const repeatKeywords = ['repeat','dobara','fir se','phir se','dubara','again','once more','samjha nahi','क्या बोला','क्या कहा','phir bolo'];
+const pauseKeywords = ['रुको','रुक','रुकिए','रुकिऐ','ek minute','ek min','hold','एक मिनट','एक पल','थोड़ी देर','थोड़ा रुको','रोको','ठहरिये'];
+
+/* ======================= MACHINE TYPES ======================= */
+const machineTypeKeywords = {
+  'Warranty': ['वारंटी','warranty','गारंटी','guarantee','free','फ्री','मुफ्त'],
+  'JCB Care': ['जीसीबी केयर','jcb care','केयर','care','annual','yearly'],
+  'Engine Care': ['इंजन केयर','engine care','engine protection'],
+  'Demo': ['डेमो','demo','demonstration','test machine'],
+  'BHL': ['बीएचएल','bhl','backhoe','back hoe']
+};
+
 const machineStatusKeywords = {
   'Breakdown': [
-    'ब्रेकडाउन', 'breakdown', 'break down', 'ब्रेक डाउन', 'ब्रेक-डाउन',
-    'बिल्कुल बंद', 'पूरी तरह बंद', 'completely down', 'totally down',
-    'बंद है', 'बंद हो गया', 'बंद हो गई', 'बंद पड़ा', 'बंद पड़ी',
-    'पूरा बंद', 'डाउन है', 'down है', 'पूरी तरह डाउन',
-    'बिल्कुल काम नहीं', 'bilkul kaam nahi', 'काम ही नहीं कर रहा',
-    'बिल्कुल चल नहीं', 'bilkul chal nahi', 'चल ही नहीं रहा',
-    'शुरू नहीं हो रहा', 'स्टार्ट नहीं हो रहा', 'चालू नहीं हो रहा',
-    'start nahi ho raha', 'chalu nahi ho raha',
-    'खराब हो गया', 'खराब हो गई', 'ठप्प है', 'ठप्प हो गया',
-    'मर गया', 'डेड', 'dead', 'stopped completely',
-    'काम नहीं करता', 'काम नहीं करती', 'work nahi karta'
+    'ब्रेकडाउन','breakdown','break down','बिल्कुल बंद','बंद है','बंद हो गया',
+    'पूरा बंद','डाउन है','बिल्कुल काम नहीं','काम ही नहीं कर रहा',
+    'शुरू नहीं हो रहा','स्टार्ट नहीं हो रहा','खराब हो गया','मर गया',
+    'start nahi ho raha','chalu nahi ho raha','dead','stopped completely'
   ],
   'Running With Problem': [
-    'चल रहा है लेकिन', 'चल रही है लेकिन', 'chal raha hai lekin',
-    'चल रहा है पर', 'चल रही है पर', 'चल तो रहा है',
-    'काम कर रहा है लेकिन', 'काम तो कर रहा है',
-    'समस्या के साथ चल', 'problem के साथ चल', 'दिक्कत के साथ चल',
-    'running with problem', 'working with issue', 'working but',
-    'आंशिक रूप से', 'partially working', 'थोड़ा काम कर',
-    'कम से कम काम कर', 'ठीक से काम नहीं लेकिन चल',
-    'प्रॉब्लम है पर चल', 'issue है but running', 'दिक्कत है लेकिन on'
+    'चल रहा है लेकिन','chal raha hai lekin','चल तो रहा है',
+    'running with problem','working with issue','working but','partially working'
   ]
 };
 
-/* ======================= JOB LOCATION KEYWORDS ======================= */
 const jobLocationKeywords = {
   'Workshop': [
-    'वर्कशॉप', 'workshop', 'वर्कशाप', 'work shop', 'वर्क शॉप',
-    'शॉप', 'shop', 'दुकान', 'गैरेज', 'garage', 'गराज',
-    'वर्कशॉप में', 'workshop में', 'workshop mein', 'shop में',
-    'शॉप में', 'गैरेज में', 'गराज में',
-    'घर पर', 'घर', 'घर में', 'home', 'होम', 'अंदर', 'indoor',
-    'गोदाम', 'शेड', 'shed', 'warehouse',
-    'service center', 'सर्विस सेंटर', 'repair shop',
-    'रिपेयर शॉप', 'मरम्मत की दुकान'
+    'वर्कशॉप','workshop','शॉप','shop','गैरेज','garage','घर पर','घर',
+    'घर में','home','होम','गोदाम','शेड','shed','service center'
   ],
   'Onsite': [
-    'साइट', 'site', 'साइट पर', 'साईट', 'साईट पर', 'site पर',
-    'खेत', 'खेत में', 'field', 'फील्ड', 'मैदान',
-    'जगह', 'जगह पर', 'बाहर', 'outdoor',
-    'काम की जगह', 'work site', 'वर्क साइट', 'location', 'लोकेशन',
-    'जहां काम हो रहा', 'construction', 'कंस्ट्रक्शन',
-    'निर्माण', 'project', 'प्रोजेक्ट',
-    'road', 'रोड', 'सड़क', 'highway', 'हाईवे'
+    'साइट','site','साइट पर','खेत','खेत में','field','फील्ड','जगह',
+    'बाहर','outdoor','काम की जगह','construction','project','road','हाईवे'
   ]
 };
 
 /* ======================= COMPREHENSIVE COMPLAINT MAP ======================= */
 const complaintMap = {
-  "Body Work": {
-    keywords: ["body", "bodywork", "bushing", "leakage", "drum", "noise", "vibration", "water", "pipe", "color", "decal", "sticker", "पेटिंग", "शरीर", "शरीर काम", "बाडी", "बॉडी", "body work", "बॉडीवर्क", "बॉडी वर्क"],
-    priority: 5,
-    subTitles: {
-      "Select Body Work": ["body", "बॉडी"],
-      "Bushing Work": ["bushing", "बुशिंग", "बुशिग", "बुसिंग"],
-      "Leakage from Drum": ["leakage", "drum", "leak", "लीकेज", "लीक", "ड्रम"],
-      "Noise from Drum": ["noise", "drum", "आवाज", "ड्रम"],
-      "Vibration fault in Drum": ["vibration", "कंपन", "कंपती", "कम्पन"],
-      "Water Sprinkle Pipe fault": ["water", "pipe", "पाइप", "पाईप", "पाइप्स"],
-      "Other": ["other", "अन्य"]
-    }
-  },
-
-  "Cabin": {
-    keywords: ["cabin", "cab", "door", "glass", "window", "bonnet", "seat", "roof", "fan", "केबिन", "सीट", "दरवाजा", "शीशा", "कैबिन", "कैबीन", "केबीन", "खिड़की", "छत", "फैन"],
-    priority: 6,
-    subTitles: {
-      "Select Cabin": ["cabin", "कैबिन"],
-      "bonnet crack": ["bonnet", "बोनेट", "बोनिट"],
-      "Cab Door Fault": ["door", "दरवाजा", "दरवाज़ा", "दरवाज", "ड्योढी"],
-      "Cabin glass cracked": ["glass", "शीशा", "ग्लास", "शीशे"],
-      "Cabin Glass removed": ["removed", "हटा", "हटाया", "निकला"],
-      "Door/window lock inoperative": ["lock", "लॉक", "लोक", "ताला"],
-      "Fan not working": ["fan", "पंखा", "फैन", "पंखे"],
-      "mounting problem": ["mounting", "माउंटिंग", "माउंटिग", "लगाना"],
-      "Operator Seat problems": ["seat", "सीट", "सीट्स", "आसन"],
-      "Roof cracked": ["roof", "छत", "छतरी"],
-      "Other": ["other", "अन्य"]
-    }
-  },
-
-  "Electrical Complaint": {
-    keywords: ["electrical", "electric", "light", "battery", "alternator", "starter", "switch", "relay", "wiring", "error code", "बिजली", "लाइट", "बैटरी", "तार", "इलेक्ट्रिक्स", "इलेक्ट्रीकल", "बिजलीय", "लाईट", "बैट्री", "बिजली की समस्या", "विद्युत"],
-    priority: 8,
-    subTitles: {
-      "Select Electrical Complaint": ["electrical", "बिजली"],
-      "Alternator not Working": ["alternator", "आल्टरनेटर", "ऑल्टरनेटर", "आल्टर"],
-      "Error Code in Machine display": ["error", "code", "error code", "error कोड", "एरर कोड"],
-      "Fuel Gauge not show": ["gauge", "fuel gauge", "गेज", "फ्यूल गेज"],
-      "Fuel Motor not Working": ["fuel motor", "फ्यूल मोटर"],
-      "Hour meter not working": ["hour meter", "आवर मीटर", "घंटा मीटर"],
-      "Light glowing problem": ["light", "लाइट", "लाईट", "रोशनी"],
-      "Relay fault": ["relay", "रिले", "रिलै"],
-      "Self/Starter motor problem": ["self", "starter", "सेल्फ", "स्टार्टर", "स्टार्टर मोटर"],
-      "Starting trouble": ["start", "शुरू", "स्टार्ट", "स्टार्टिग"],
-      "Switch Fault": ["switch", "स्विच", "स्वीच", "स्विच्च"],
-      "Wiper motor not working": ["wiper", "वाइपर", "वेपर"],
-      "Wiring problem": ["wiring", "तार", "वायरिंग", "वायरीग", "तारों"],
-      "Other": ["other", "अन्य"]
-    }
-  },
-
   "Engine": {
-    keywords: ["engine", "motor", "start", "smoke", "overheat", "noise", "power", "oil", "leakage", "seal leak", "fan belt", "इंजन", "मोटर", "शुरू", "धुआ", "गर्मी", "आवाज", "इंडियन", "मोटर्स", "इंजिन", "इंजीन", "मोटर्स", "इंजिन की समस्या", "मोटर समस्या", "स्टार्ट नहीं", "चलना", "चल नहीं रहा", "चालू", "चाल"],
+    keywords: ["engine","motor","इंजन","मोटर","चालू नहीं","शुरू नहीं","मशीन चालू नहीं","मशीन स्टार्ट नहीं","मोटर खराब","इंजन खराब","इंजिन","start नहीं","chalu नहीं","शुरुआत नहीं","run नहीं","झटके","थरथार"],
     priority: 10,
     subTitles: {
-      "Select Engine": ["engine", "इंजन"],
-      "Abnormal Noise": ["noise", "आवाज", "sound", "शोर", "खर्र", "खड़खड़", "आवज़", "सोंड"],
-      "Air problem": ["air", "हवा", "एयर", "एर"],
-      "coolant leak": ["coolant", "कूलेंट", "कूलेन्ट", "ठंडक"],
-      "Engine accessories": ["accessories", "एक्सेसरीज"],
-      "Engine Lugg down": ["lugg", "down", "लग", "लड़"],
-      "Engine Over heating": ["overheat", "गर्म", "गरम", "ओवरहीट", "ओवर हीट"],
-      "Engine seal leak": ["seal", "leak", "लीक", "सील"],
-      "Fan belt broken": ["fan", "belt", "फैन", "बेल्ट"],
-      "Fuel consumption high": ["fuel", "consumption", "फ्यूल", "कंजम्पशन"],
-      "Leakages engine": ["leakage", "लीकेज", "लीक", "लीकेथ"],
-      "Oil consumption high": ["oil", "consumption", "तेल", "कंजम्पशन"],
-      "Radiator leak": ["radiator", "रेडिएटर", "रेडिएटर से लीक"],
-      "Smoke problem": ["smoke", "dhuan", "धुआ", "स्मोक", "धुंआ"],
-      "Engine mounting problem": ["mounting", "माउंटिंग", "माउंट"],
-      "Accelerator cable problem": ["accelerator", "एक्सेलरेटर"],
-      "Starting trouble": ["start", "starting", "शुरू", "स्टार्ट", "स्टार्ट नहीं"],
-      "Other": ["other", "अन्य"]
+      "Start Problem": ["start","स्टार्ट नहीं","शुरू नहीं","chalu nahi","चालू नहीं","starter","cranking","बंद है","मर गया","डेड"],
+      "Overheating": ["overheat","गर्म","गरम","heat","temperature","गर्मी","बहुत गर्म","high temperature","आग"],
+      "Black Smoke": ["smoke","धुआ","काला धुआ","black smoke","smoking","fumes","dhaua"],
+      "Loss of Power": ["power कम","weak","कमजोर","no power","slow","sluggish","तेजी नहीं","गति नहीं"],
+      "Knocking Noise": ["knock","knocking","टकटक","chattering","खटाखट","खड़खड़"],
+      "Diesel Leak": ["leak","लीक","fuel leak","diesel बह रहा","ईंधन लीक","तेल निकल रहा"],
+      "Abnormal Noise": ["noise","आवाज","sound","शोर","grinding","whining","whistling"],
+      "Fuel Consumption": ["fuel","petrol","diesel","खर्च","consumption","mileage","ईंधन खपत"],
+      "Misfire": ["misfire","coughing","jerking","stumbling","कंपन","झटका","थरथराना"]
     }
   },
-
-  "Fabrication part": {
-    keywords: ["fabrication", "boom", "bucket", "chassis", "dipper", "crack", "leak", "fuel tank", "hydraulic tank", "टूटा", "फटा", "क्रैक", "फैब्रिकेशन", "फैबिकेशन", "क्रैक्स", "बूम", "बकेट", "चेसिस"],
-    priority: 6,
+  "Starting Trouble": {
+    keywords: [
+      // Hindi
+      "स्टार्ट नहीं","चालू नहीं","शुरू नहीं","बंद है","चालू नहीं हो रहा",
+      "स्टार्ट नहीं हो रहा","मशीन नहीं चली","इग्निशन नहीं","क्रैंक",
+      "स्टार्टिंग","शुरु नहीं","शुरुआत नहीं","स्टार्ट नहीं होता",
+      "स्टार्टर खराब","स्टार्टर समस्या","शुरुआत की समस्या","चालू करने में समस्या",
+      "मशीन स्टार्ट नहीं हो रही","स्टार्ट करना मुश्किल","स्टार्ट नहीं हो पा रहा",
+      // English/Hinglish
+      "starting","start nahi","chalu nahi","band hai","start ho nahi raha",
+      "start problem","starting problem","start nahi hota","start issue",
+      "cold start","hard start","slow start","no start","wont start",
+      "start nahi ho raha","start hi nahi","engine start","crank","ignition",
+      "start karna","starting trouble","shuru nahi","starter","starter problem",
+      "starting issue","won't start","doesn't start","fails to start"
+    ],
+    priority: 10,
     subTitles: {
-      "Select Fabrication part": ["fabrication", "फैब्रिकेशन"],
-      "Boom cracked": ["boom", "crack", "बूम", "क्रैक"],
-      "Bucket cracked": ["bucket", "crack", "बकेट", "क्रैक"],
-      "Bucket issue": ["bucket", "बकेट", "बालटी"],
-      "Chassis cracked": ["chassis", "चेसिस", "चेसी"],
-      "Dipper cracked": ["dipper", "डिपर", "डिप्पर"],
-      "Fuel Tank Leakage": ["fuel tank", "leak", "फ्यूल टैंक", "टैंक"],
-      "Hydraulic Tank leakage": ["hydraulic tank", "हाइड्रोलिक टैंक"],
-      "King post problem": ["king post", "किंग पोस्ट"],
-      "Loader arm": ["loader arm", "लोडर आर्म", "लोडर"],
-      "Pin broken": ["pin", "पिन"],
-      "Teeth broken": ["teeth", "दांत"],
-      "Other": ["other", "अन्य"]
+      "No Start Condition":  ["no start","बिल्कुल नहीं","शुरू ही नहीं","dead","complete fail","wont start","start hi nahi","bilkul nahi","engine hi nahi"],
+      "Hard Starting":       ["hard start","कठिन","मुश्किल से","कई बार","attempt","mushkil","baar baar"],
+      "Cold Starting Issue": ["cold start","सर्द","ठंड में","morning","raat ke baad","subah","sardi"],
+      "Slow Starting":       ["slow start","धीमा","samay lagta","late","dheere","der lagti"],
+      "Cranking Weak":       ["cranking","weak crank","कमजोर क्रैंक","rpm","turnover","ghoomta nahi"],
+      "Self Starter Fail":   ["self","self starter","self nahi","सेल्फ","सेल्फ नहीं","self problem"]
     }
   },
-
-  "Transmission/Axle components": {
-    keywords: ["transmission", "gear", "axle", "brake", "oil leak", "overheat", "ट्रांसमिशन", "गियर", "ब्रेक", "ट्रान्समिशन", "ट्रांसमीशन", "गीयर", "ब्रेक्स"],
-    priority: 7,
+  "Transmission": {
+    keywords: ["transmission","gear","shift","गियर","ट्रांसमिशन","gear box","ट्रांसमिशन खराब","गियर समस्या","शिफ्ट","gear change","shifting","नहीं लग रहा","गियर नहीं लग"],
+    priority: 9,
     subTitles: {
-      "Select Transmission/Axle": ["transmission", "ट्रांसमिशन"],
-      "Abnormal sound Transmission": ["sound", "noise", "आवाज"],
-      "Brake problem": ["brake", "ब्रेक", "ब्रेक्स"],
-      "Gear box problem": ["gear", "gearbox", "गियर", "गीयर"],
-      "Gear hard": ["gear hard", "गियर सख्त"],
-      "Oil leak from transmission": ["oil leak", "तेल लीक"],
-      "Reverse forward issue": ["reverse", "रिवर्स"],
-      "Transmission overheat": ["overheat", "गर्मी"],
-      "Other": ["other", "अन्य"]
+      "Gear Shifting Hard": ["shift hard","shift difficult","gear नहीं लग रहा","grinding","stuck","jam","मुश्किल","जाम हो गया"],
+      "Slipping": ["slipping","rpm बढ़ रहा","power loss","slip करना","खिसकना"],
+      "Neutral Problem": ["neutral","neutral में फंस","न्यूट्रल"],
+      "Gear Grinding": ["grind","grinding","grinding noise","scraping","चरमरा","खरखराहट"]
     }
   },
-
-  "Hose": {
-    keywords: ["hose", "hose leak", "hose cut", "o ring", "होज़", "होज", "होज़े", "पाइप", "ट्यूब"],
-    priority: 4,
+  "Hydraulic System": {
+    keywords: ["hydraulic","pressure","pump","हाइड्रोलिक","पंप","दबाव","प्रेशर","pressure कम","दबाव कम","hydraulic oil","हाइड्रोलिक तेल","loader","bucket","boom","arm"],
+    priority: 9,
     subTitles: {
-      "Select Hose": ["hose", "होज़"],
-      "Hose O ring Cut": ["o ring", "ओ रिंग"],
-      "Hose cut": ["hose cut", "होज़ कटा"],
-      "Hose leakages": ["leak", "leakage", "लीकेज"],
-      "Other": ["other", "अन्य"]
+      "Low Pressure": ["pressure कम","प्रेशर कम","दबाव कम","low","weak","slow","तेजी नहीं","स्पीड कम"],
+      "Bucket Not Lifting": ["bucket नहीं उठ","lift नहीं","boom slow","arm नहीं उठ","उठता नहीं","बाल्टी नहीं"],
+      "Hydraulic Leak": ["leak","लीक","oil leak","seeping","बह रहा","dripping","तेल गिरना"],
+      "Pump Failure": ["pump fail","pump नहीं","pump problem","पंप खराब","पंप मर गया"],
+      "Cylinder Problem": ["cylinder","cylinder leak","rod","seal","सिलेंडर"],
+      "Hose Pressure": ["hose","hose leak","pipe burst","नली","पाइप"]
     }
   },
-
-  "Hydraulic": {
-    keywords: ["hydraulic", "pressure", "pump", "valve", "seal leak", "performance", "oil cooler", "motion cable", "प्रेशर", "दबाव", "पंप", "हाइड्रोलिक", "हाइड्रोलीक", "प्रेशर की समस्या", "दबाव में समस्या", "हाइड्रो", "पंप की समस्या"],
+  "Braking System": {
+    keywords: ["brake","ब्रेक","braking","stop","रोक","पैडल","brake pedal","ब्रेकिंग","ब्रेक खराब","रुकना मुश्किल","disc brake","band brake"],
+    priority: 10,
+    subTitles: {
+      "Brake Not Working": ["brake काम नहीं","no braking","brake fail","नहीं रुक रहा","ब्रेक नहीं","रोकना नहीं"],
+      "Weak Braking": ["brake कमजोर","weak","slow stop","soft pedal","दुर्बल","हल्का"],
+      "Brake Pads Worn": ["pads","pad worn","पैड","पैड पहना","पैड टूटा","घिसाव"],
+      "Brake Fluid Leak": ["fluid leak","brake leak","पेडल दबता नहीं","spongy pedal","तरल लीक"],
+      "Brake Noise": ["noise","squealing","grinding","creaking","screeching","शोर","चीख"]
+    }
+  },
+  "Electrical System": {
+    keywords: ["electrical","battery","light","बिजली","बैटरी","स्टार्टर","अल्टरनेटर","wiring","spark","ignition"],
     priority: 8,
     subTitles: {
-      "Select Hydraulic": ["hydraulic", "हाइड्रोलिक"],
-      "Abnormal sound": ["sound", "noise", "आवाज"],
-      "Control Valve leakage": ["valve", "वाल्व", "वेल्व"],
-      "EVB seal leak": ["seal leak", "सील"],
-      "Hydra clamp issue": ["clamp", "क्लैम्प"],
-      "Hydraulic pump broken": ["pump broken", "पंप टूटा"],
-      "Hydraulic pump leak": ["pump leak", "पंप लीक"],
-      "Hydraulic pump Noise": ["pump noise", "पंप आवाज"],
-      "LVB seal leak": ["seal leak", "सील लीक"],
-      "Machine performance low": ["performance low", "slow", "धीमा", "परफॉर्मेंस कम"],
-      "Oil cooler leak": ["cooler", "कूलर"],
-      "Pressure down": ["pressure down", "दबाव कम", "दबाव में कमी"],
-      "Swing Motor leakage": ["swing motor", "स्विंग मोटर"],
-      "Swing Motor not braking": ["not braking", "नहीं रुक रहा"],
-      "Other": ["other", "अन्य"]
+      "Battery Problem": ["battery","dead","weak","बैटरी नहीं चार्ज","charge नहीं हो रहा"],
+      "Starter Motor": ["starter","स्टार्टर","cranking weak","starter खराब","no crank"],
+      "Alternator Problem": ["alternator","charge नहीं","alternator खराब","बिजली नहीं"],
+      "Wiring Issue": ["wiring","wire","short","spark","electrical short"],
+      "Light Problem": ["light","लाइट","headlight","taillight","बत्ती नहीं जल रही"]
     }
   },
-
-  "Ram/Cylinder": {
-    keywords: ["ram", "cylinder", "seal leak", "rod", "leak", "सिलिंडर", "रॉड", "सिलेंडर", "सिलिन्डर", "रॉड्स", "सील"],
-    priority: 6,
+  "Cooling System": {
+    keywords: ["cooling","coolant","radiator","fan","पंखा","ठंडा करना","water pump","thermostat","temperature","water system"],
+    priority: 8,
     subTitles: {
-      "Select Ram/Cylinder": ["ram", "cylinder", "सिलिंडर"],
-      "Boom ram seal leak": ["boom ram", "बूम रैम"],
-      "bucket ram seal leak": ["bucket ram", "बकेट रैम"],
-      "Cylinder welding leak": ["cylinder", "सिलिंडर"],
-      "Dipper ram seal leak": ["dipper ram", "डिपर रैम"],
-      "Ram leak": ["ram leak", "रैम लीक"],
-      "Rod bend": ["rod bend", "रॉड मुड़ा"],
-      "Rod broken": ["rod broken", "रॉड टूटा"],
-      "Slew ram seal leak": ["slew ram", "स्लू रैम"],
-      "Other": ["other", "अन्य"]
+      "Radiator Leak": ["radiator leak","radiator खराब","पानी निकल रहा","water leak"],
+      "Fan Problem": ["fan","पंखा","fan काम नहीं","fan slow","fan noise"],
+      "Thermostat": ["thermostat","temperature control","temp problem"],
+      "Water Pump": ["pump","पंप","water नहीं घूम रहा","pump leak"]
     }
   },
-
-  "Service": {
-    keywords: ["service", "servicing", "maintenance", "checkup", "visit", "सर्विस", "मेंटेनेंस", "रखरखाव", "सर्विसिंग", "सर्विस की", "मेंटेनेंस की", "मेंटेनेन्स"],
-    priority: 3,
+  "AC/Cabin": {
+    keywords: [
+      // Hindi — the critical ones that were missing
+      "ऐसी","एसी","ए.सी","ए सी","एअर कंडीशनर","एयर कंडीशनर",
+      "ठंडा नहीं","ठंडक नहीं","गरम हवा","कैबिन गर्म","ठंडी नहीं",
+      "ऐसी खराब","एसी खराब","ऐसी बंद","एसी बंद","ऐसी काम नहीं",
+      "ब्लोअर","कंप्रेसर","कंडेंसर","फिल्टर","एसी की खराबी","एयर",
+      "सी खराब","ठंडक नहीं दे रहा","हवा नहीं","ठंड नहीं आ रही",
+      // English / Hinglish
+      "ac","a.c","a/c","air conditioner","air conditioning",
+      "esi","aisi","aesi","a c","ac nahi","ac band","ac kharab",
+      "cabin cool","cooling nahi","thanda nahi","thandi nahi",
+      "compressor","condenser","blower","ac filter","cabin hot",
+      "ac chal nahi","ac chalta nahi","ac problem","cool nahi kar raha",
+      "ac cooling","cooling band","cabin temperature","ac issue",
+    ],
+    priority: 8,
     subTitles: {
-      "Actual Service": ["service", "actual", "सर्विस"],
-      "Service Visit": ["visit", "विजिट"],
-      "Other": ["other", "अन्य"]
+      "AC Not Cooling":  ["ठंडा नहीं","thanda nahi","thandi nahi","cooling नहीं","cool nahi","ac weak","temperature high","गरम हवा","hot air","ठंडक नहीं"],
+      "AC Not Working":  ["ac काम नहीं","ac band","ac off","ac chalta nahi","compressor fail","कंप्रेसर","ac nahi chala","बिल्कुल बंद"],
+      "Blower Problem":  ["blower","ब्लोअर","blower noise","blower kharab","hawa nahi aa rahi","हवा नहीं","fan nahi"],
+      "Gas Leakage":     ["gas","gas leak","refrigerant","re-gas","gas khatam","गैस","रेफ्रिजरेंट"],
+      "Filter Choked":   ["filter","filter chok","filter kharab","air flow कम","dust","jaam","जाम"]
     }
   },
-
-  "Tyre/Battery": {
-    keywords: ["tyre", "tire", "battery", "tube", "puncture", "टायर", "बैटरी", "पंक्चर", "ट्यूब", "बैट्री", "पंक्चर का", "टायर की"],
+  "Steering": {
+    keywords: ["steering","पहिया","wheel","turn","स्टीयरिंग","पावर स्टीयरिंग","power steering","turning"],
+    priority: 8,
+    subTitles: {
+      "Hard Steering": ["hard","heavy","कड़ा","difficult turn","मुश्किल से मुड़ता"],
+      "Power Steering Fail": ["power steering","पावर खो गया","power loss","steering काम नहीं"],
+      "Steering Noise": ["noise","whining","groaning","creaking"],
+      "Vibration": ["vibration","shake","कंपन","road feel"]
+    }
+  },
+  "Clutch": {
+    keywords: ["clutch","क्लच","clutch pedal","disengagement","engagement","क्लच पैडल","क्लच खराब","clutch plate"],
     priority: 7,
     subTitles: {
-      "Select Tyre/Battery": ["tyre", "battery", "टायर"],
-      "Battery problem": ["battery", "बैटरी", "बैट्री"],
-      "Tube joint opened": ["tube", "ट्यूब"],
-      "Tube puncture": ["puncture", "पंक्चर", "पंचर"],
-      "Tyre burst": ["burst", "फूला", "फूलना"],
-      "Tyre cut": ["cut", "कटा", "कटी"],
-      "Tyre rubber breaking": ["rubber", "रबर"],
-      "Other": ["other", "अन्य"]
+      "Clutch Slip": ["slip","slipping","गति नहीं बढ़ रही","rpm बढ़ता है","क्लच फिसल"],
+      "Hard Pedal": ["hard","tight","कड़ा","difficult depress","पेडल कड़ा","दबाना मुश्किल"],
+      "Clutch Noise": ["noise","squeak","groaning","whistling","शोर","चीख"],
+      "Clutch Wear": ["wear","worn","friction कम","response slow","घिसाव"]
     }
   },
-
-  "Under Carriage": {
-    keywords: ["under carriage", "idler", "roller", "sprocket", "track", "gear", "अंडर कैरिएज", "आइडलर", "रोलर", "स्प्रोकेट", "ट्रैक"],
-    priority: 5,
+  "Fuel System": {
+    keywords: ["fuel","petrol","diesel","फ्यूल","tank","injector","fuel pump","fuel filter","fuel supply"],
+    priority: 8,
     subTitles: {
-      "Select Under Carriage": ["carriage", "कैरिएज"],
-      "Idler wheel leakage": ["idler", "आइडलर"],
-      "Idler wheel noise": ["idler noise", "आइडलर आवाज"],
-      "Ring gear Crack": ["ring gear", "रिंग गियर"],
-      "Roller Bent": ["roller", "रोलर"],
-      "Roller leakage": ["leakage", "लीकेज"],
-      "Sprocket Wear": ["sprocket", "स्प्रोकेट"],
-      "Track Motor leak": ["track", "ट्रैक"],
-      "Track Shoe bend": ["track shoe", "ट्रैक शू"],
-      "Other": ["other", "अन्य"]
+      "Fuel Pump": ["pump","pump fail","no fuel supply","fuel नहीं आ रहा"],
+      "Fuel Filter": ["filter","choke","filter खराब","fuel flow कम"],
+      "Injector Problem": ["injector","injector block","spray problem"],
+      "Fuel Leak": ["leak","leaking","fuel बह रहा","tank leak"]
     }
   },
-
-  "PDI": {
-    keywords: ["pdi", "pre delivery inspection", "पीडीआई", "प्री डिलीवरी"],
-    priority: 1,
+  "Bucket/Boom": {
+    keywords: ["bucket","boom","bucket arm","loader arm","loader","dipper","arm","bucket lift","boom not rising"],
+    priority: 8,
     subTitles: {
-      "PDI": ["pdi", "पीडीआई"]
+      "Bucket Not Working": ["bucket नहीं","bucket खराब","bucket ठीक नहीं","bucket stuck"],
+      "Boom Slow": ["boom slow","boom power कम","lifting slow","लिफ्टिंग कमजोर"],
+      "Bucket Weld Crack": ["crack","टूटा","weld break","टूटन"],
+      "Arm Bent": ["bent","टेढ़ा","damage","misalignment"]
     }
   },
-
-  "Installation": {
-    keywords: ["installation", "install", "इंस्टॉलेशन", "इंस्टालेशन", "इंस्टलेशन"],
-    priority: 2,
+  "Oil Leak": {
+    keywords: ["oil leak","leak","oil","तेल","तेल बह रहा","leaking"],
+    priority: 7,
     subTitles: {
-      "Installation visit": ["installation", "इंस्टॉलेशन"]
+      "Engine Oil Leak": ["engine","engine leak","तेल टपक रहा"],
+      "Transmission Leak": ["transmission","gear oil leak"],
+      "Hydraulic Leak": ["hydraulic","hydraulic fluid leak"],
+      "Seal Problem": ["seal","gasket","seal खराब"]
     }
   },
-
-  "General Visit": {
-    keywords: ["visit", "general", "asc", "bw", "monthly", "number plate", "accidental", "विजिट", "सामान्य"],
-    priority: 1,
-    subTitles: {
-      "General Visit": ["general", "visit", "विजिट"],
-      "Monthly Visit": ["monthly", "मासिक"],
-      "Number plate fitment": ["number plate", "नंबर प्लेट"],
-      "Accidental": ["accidental", "accident", "दुर्घटना"]
-    }
-  },
-
-  "Livelink": {
-    keywords: ["livelink", "alert", "लाइवलिंक", "एलर्ट"],
-    priority: 1,
-    subTitles: {
-      "Livelink not working": ["livelink not", "not working"],
-      "Alert": ["alert", "एलर्ट"]
-    }
-  },
-
-  "ECU problem": {
-    keywords: ["ecu", "error code", "sensor", "ईसीयू", "ई सी यू", "सेंसर"],
+  "Vibration": {
+    keywords: ["vibration","shake","vibrate","कंपन","shaking","tremor"],
     priority: 6,
     subTitles: {
-      "ECU problem": ["ecu", "ईसीयू"]
+      "Engine Vibration": ["engine","engine shake","unbalance"],
+      "Driveline Vibration": ["drive","drivetrain","transmission"],
+      "Wheel Vibration": ["wheel","tyre","balancing"]
     }
   },
-
-  "Campaign": {
-    keywords: ["campaign", "fsi", "कैंपेन", "कैम्पेन", "कैम्पेन की"],
+  "Noise": {
+    keywords: ["noise","sound","आवाज","creaking","grinding","clunking","शोर","ध्वनि","खरखराहट"],
+    priority: 5,
+    subTitles: {
+      "Engine Knocking": ["knock","knocking","ping","खटाखट","टकटक"],
+      "Grinding": ["grinding","grinding noise","metal sound","अपघर्षण"],
+      "Squealing": ["squeal","squealing","high pitch","चीख"],
+      "Clunking": ["clunk","clanking","metallic","धड़ाम"]
+    }
+  },
+  "General Problem": {
+    keywords: ["problem","issue","समस्या","दिक्कत","खराब","trouble","परेशानी"],
     priority: 1,
     subTitles: {
-      "Campaign Visit": ["campaign", "कैंपेन"],
-      "FSI": ["fsi", "एफएसआई"]
-    }
-  },
-
-  "AC System": {
-    keywords: ["ac", "a.c", "air conditioner", "cooling", "ठंडा", "कूलिंग", "एसी", "ए सी", "एसी की", "एक", "एकसी", "एयर कंडीशनर", "कूल", "ठंडी"],
-    priority: 10,
-    subTitles: {
-      "AC not Working": ["not working", "काम नहीं", "नहीं चल", "खराब"],
-      "AC not Cooling": ["not cooling", "ठंडा नहीं", "कूलिंग नहीं", "ठंड नहीं"]
+      "Service Needed": ["service","maintenance","check","inspection","सेवा","रखरखाव"],
+      "Other": ["other","general","कुछ खराब","और","अन्य"]
     }
   }
 };
 
-/* ======================= BRANCH, OUTLET & CITY CODE MAPPING ======================= */
+/* ======================= CITY MAPPING ======================= */
 const cityToBranchMap = {
-  'ajmer': { branch: "AJMER", outlet: "AJMER", cityCode: "1" },
-  'अजमेर': { branch: "AJMER", outlet: "AJMER", cityCode: "1" },
-  'kekri': { branch: "AJMER", outlet: "KEKRI", cityCode: "1" },
-  'केकड़ी': { branch: "AJMER", outlet: "KEKRI", cityCode: "1" },
-
-  'alwar': { branch: "ALWAR", outlet: "ALWAR", cityCode: "2" },
-  'अलवर': { branch: "ALWAR", outlet: "ALWAR", cityCode: "2" },
-  'bharatpur': { branch: "ALWAR", outlet: "BHARATPUR", cityCode: "2" },
-  'भरतपुर': { branch: "ALWAR", outlet: "BHARATPUR", cityCode: "2" },
-  'bhiwadi': { branch: "ALWAR", outlet: "BHIWADI", cityCode: "2" },
-  'भिवाड़ी': { branch: "ALWAR", outlet: "BHIWADI", cityCode: "2" },
-
+  'ajmer':    { branch: "AJMER",    outlet: "AJMER",    cityCode: "1" },
+  'अजमेर':   { branch: "AJMER",    outlet: "AJMER",    cityCode: "1" },
+  'kekri':    { branch: "AJMER",    outlet: "KEKRI",    cityCode: "1" },
+  'alwar':    { branch: "ALWAR",    outlet: "ALWAR",    cityCode: "2" },
+  'अलवर':    { branch: "ALWAR",    outlet: "ALWAR",    cityCode: "2" },
+  'bharatpur':{ branch: "ALWAR",    outlet: "BHARATPUR",cityCode: "2" },
   'bhilwara': { branch: "BHILWARA", outlet: "BHILWARA", cityCode: "3" },
   'भीलवाड़ा': { branch: "BHILWARA", outlet: "BHILWARA", cityCode: "3" },
-  'nimbahera': { branch: "BHILWARA", outlet: "NIMBAHERA", cityCode: "3" },
-  'निम्बाहेड़ा': { branch: "BHILWARA", outlet: "NIMBAHERA", cityCode: "3" },
-
-  'jaipur': { branch: "JAIPUR", outlet: "JAIPUR", cityCode: "4" },
-  'जयपुर': { branch: "JAIPUR", outlet: "JAIPUR", cityCode: "4" },
-  'dausa': { branch: "JAIPUR", outlet: "DAUSA", cityCode: "4" },
-  'दौसा': { branch: "JAIPUR", outlet: "DAUSA", cityCode: "4" },
-  'karauli': { branch: "JAIPUR", outlet: "KARAULI", cityCode: "4" },
-  'करौली': { branch: "JAIPUR", outlet: "KARAULI", cityCode: "4" },
-  'tonk': { branch: "JAIPUR", outlet: "TONK", cityCode: "4" },
-  'टोंक': { branch: "JAIPUR", outlet: "TONK", cityCode: "4" },
-
-  'kota': { branch: "KOTA", outlet: "KOTA", cityCode: "5" },
-  'कोटा': { branch: "KOTA", outlet: "KOTA", cityCode: "5" },
-  'jhalawar': { branch: "KOTA", outlet: "JHALAWAR", cityCode: "5" },
-  'झालावाड़': { branch: "KOTA", outlet: "JHALAWAR", cityCode: "5" },
-
-  'sikar': { branch: "SIKAR", outlet: "SIKAR", cityCode: "6" },
-  'सीकर': { branch: "SIKAR", outlet: "SIKAR", cityCode: "6" },
-  'sujangarh': { branch: "SIKAR", outlet: "SUJANGARH", cityCode: "6" },
-  'सुजानगढ़': { branch: "SIKAR", outlet: "SUJANGARH", cityCode: "6" },
-  'jhunjhunu': { branch: "SIKAR", outlet: "JHUNJHUNU", cityCode: "6" },
-  'झुंझुनू': { branch: "SIKAR", outlet: "JHUNJHUNU", cityCode: "6" },
-
-  'udaipur': { branch: "UDAIPUR", outlet: "UDAIPUR", cityCode: "7" },
-  'उदयपुर': { branch: "UDAIPUR", outlet: "UDAIPUR", cityCode: "7" },
-  'banswara': { branch: "UDAIPUR", outlet: "BANSWARA", cityCode: "7" },
-  'बांसवाड़ा': { branch: "UDAIPUR", outlet: "BANSWARA", cityCode: "7" },
-  'dungarpur': { branch: "UDAIPUR", outlet: "DUNGARPUR", cityCode: "7" },
-  'डूंगरपुर': { branch: "UDAIPUR", outlet: "DUNGARPUR", cityCode: "7" },
+  'jaipur':   { branch: "JAIPUR",   outlet: "JAIPUR",   cityCode: "4" },
+  'जयपुर':   { branch: "JAIPUR",   outlet: "JAIPUR",   cityCode: "4" },
+  'kota':     { branch: "KOTA",     outlet: "KOTA",     cityCode: "5" },
+  'कोटा':    { branch: "KOTA",     outlet: "KOTA",     cityCode: "5" },
+  'sikar':    { branch: "SIKAR",    outlet: "SIKAR",    cityCode: "6" },
+  'सीकर':    { branch: "SIKAR",    outlet: "SIKAR",    cityCode: "6" },
+  'udaipur':  { branch: "UDAIPUR",  outlet: "UDAIPUR",  cityCode: "7" },
+  'उदयपुर':  { branch: "UDAIPUR",  outlet: "UDAIPUR",  cityCode: "7" }
 };
 
-/* ======================= HELPER: Convert phone to spoken digits ======================= */
-function phoneToSpokenDigits(phone) {
-  if (!phone) return "";
-  
-  const digitMap = {
-    '0': 'zero', '1': 'ek', '2': 'do', '3': 'teen', '4': 'char',
-    '5': 'paanch', '6': 'chhe', '7': 'saat', '8': 'aath', '9': 'nau'
-  };
-  
-  return phone.split('').map(d => digitMap[d] || d).join(', ');
+/* ======================= SPEECH HELPERS ======================= */
+function cleanSpeech(text) {
+  if (!text) return "";
+  return text.toLowerCase().replace(/[।.,!?]/g, "").replace(/\s+/g, " ").trim();
 }
 
-/* ===========================
-   VALIDATION FUNCTIONS
-=========================== */
+function safeAscii(text) {
+  if (!text) return "Unknown";
+  return text.replace(/[^\w\s\-]/g, '').trim() || "Unknown";
+}
 
-function rejectInvalid(text) {
-  if (!text) return true;
-  if (text.trim().length < 2) return true;
-  if (isUncertain(text)) return true;
-  if (isRepeatRequest(text)) return true;
-  if (isPauseRequest(text)) return true;
-  return false;
+function countWords(text) {
+  if (!text) return 0;
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
 function isUncertain(text) {
   if (!text) return false;
-  const textLower = text.toLowerCase();
-  return uncertaintyKeywords.some(keyword =>
-    new RegExp(`\\b${keyword}\\b`, 'i').test(textLower)
-  );
+  const t = text.toLowerCase();
+  return uncertaintyKeywords.some(k => t.includes(k.toLowerCase()));
 }
 
 function isAffirmative(text) {
   if (!text) return false;
-  const textLower = text.toLowerCase().trim();
-
-  const simpleChecks = ['हां', 'हाँ', 'हान', 'सही', 'ठीक', 'जी', 'yes', 'ok', 'बिल्कुल'];
-  for (const check of simpleChecks) {
-    if (textLower.includes(check)) {
-      console.log(`✅ Affirmative detected: "${check}"`);
-      return true;
-    }
+  const t = text.toLowerCase().trim();
+  
+  // Direct keyword match
+  if (affirmativeKeywords.some(k => t.includes(k.toLowerCase()))) return true;
+  
+  // Check for pronoun-based affirmations with "haan/ha/ji/theek" + possessive/personal pronouns
+  // Match patterns like: "हा मेरा है", "हाँ मेरी है", "मुझे ठीक है", "मैं ठीक हूँ", "यह मेरी है"
+  const affirmPronounPatterns = [
+    /\b(ha|haa|haan|han|haa|hain|hi|he)\s+(mera|meri|mere|mero|mero|hamara|hamari|hamra)\b/i,
+    /\b(mera|meri|mere|hamara|hamari)\s+(hai|he|h|a|sahi|theek|bilkul|ठीक|सही)\b/i,
+    /\b(mujhe|hamko|hamhe|mujhko)\s+(theek|sahi|bilkul|sab|khub|badhiya|badhia)\b/i,
+    /\b(main|mai|men|ham|hum|hamlog)\s+(theek|sahi|ready|tayyar|ok|fine|good)\b/i,
+    /\b(yeh|ye|yah|yaha|iska|uska)\s+(sahi|theek|bilkul|ठीक|सही|ठीक है)\b/i,
+  ];
+  
+  for (const pattern of affirmPronounPatterns) {
+    if (pattern.test(t)) return true;
   }
-
-  const found = affirmativeKeywords.some(keyword => {
-    const keywordLower = keyword.toLowerCase();
-    return textLower.includes(keywordLower);
-  });
-
-  if (found) {
-    console.log(`✅ Affirmative detected`);
-  }
-
-  return found;
+  
+  return false;
 }
 
 function isNegative(text) {
   if (!text) return false;
-  const textLower = text.toLowerCase().trim();
-
-  const simpleChecks = ['नहीं', 'नही', 'ना', 'गलत', 'no', 'नाह'];
-  for (const check of simpleChecks) {
-    if (textLower.includes(check)) {
-      console.log(`❌ Negative detected: "${check}"`);
-      return true;
-    }
+  const t = text.toLowerCase().trim();
+  
+  // Direct keyword match
+  if (negativeKeywords.some(k => t.includes(k.toLowerCase()))) return true;
+  
+  // Check for pronoun-based negations with "nahi/na/naa" + possessive/personal pronouns
+  // Match patterns like: "मेरा नहीं है", "मुझे नहीं चाहिए", "मैं नहीं सोचता", "यह मेरी नहीं है"
+  const negPronounPatterns = [
+    /\b(mera|meri|mere|hamara|hamari|hamra)\s+(nahi|nah|na|hi|hee|not|galat|galti)\b/i,
+    /\b(nahi|nah|na|hi|hee|not)\s+(mera|meri|mere|hamara|hamari|hamra)\b/i,
+    /\b(mujhe|hamko|hamhe|mujhko)\s+(nahi|na|galat|bilkul)\s+(chahiye|dhara|pehchan|samjh|lage|lagta)\b/i,
+    /\b(main|mai|men|ham|hum|hamlog)\s+(nahi|na|not|galat|bilkul|kbhi)\s+(hoon|hun|hu|theek|sahi|ready)\b/i,
+    /\b(iska|uska|yah|yeh|ye|yaha)\s+(nahi|na|not|galat|bilkul)\b/i,
+    /\b(nahi|na|not)\s+(hai|h|a|samajh|lag|clear)\b/i,
+  ];
+  
+  for (const pattern of negPronounPatterns) {
+    if (pattern.test(t)) return true;
   }
-
-  const found = negativeKeywords.some(keyword => {
-    const keywordLower = keyword.toLowerCase();
-    return textLower.includes(keywordLower);
-  });
-
-  if (found) {
-    console.log(`❌ Negative detected`);
-  }
-
-  return found;
+  
+  return false;
 }
 
-function getSubComplaintQuestion(complaintType) {
-  const questions = {
-    "AC System": "AC mein exactly kya problem hai? Bilkul chal nahi raha hai, ya chal raha hai lekin thanda nahi kar raha?",
-    "Engine": "Engine mein kya dikkat hai? Start nahi ho raha, ya overheat ho raha hai, ya dhuan aa raha hai, ya noise aa rahi hai?",
-    "Brake": "Brake mein kya problem hai? Bilkul nahi lag raha, ya weak hai?",
-    "Electrical Complaint": "Electrical mein kya problem hai? Start nahi ho raha, ya battery ki problem hai, ya light ki dikkat?",
-    "Hydraulic": "हाइड्रोलिक में क्या समस्या है? दबाव कम है, या धीरे काम कर रहा है, या रिसाव हो रहा है?",
-    "Tyre/Battery": "Tyre ya battery mein kya problem hai? Battery dead hai, ya tyre puncture hai, ya tyre cut hai?",
-    "Transmission/Axle components": "Transmission mein kya problem hai? Sound aa rahi hai, ya gear problem hai, ya brake issue?",
-    "General Problem": "Machine mein aur detail mein kya problem hai?"
-  };
+function rejectInvalid(text) {
+  if (!text || text.trim().length < 2) return true;
+  if (isUncertain(text)) return true;
+  const t = text.toLowerCase();
+  if (repeatKeywords.some(k => t.includes(k))) return true;
+  if (pauseKeywords.some(k => t.includes(k))) return true;
+  return false;
+}
 
-  return questions[complaintType] || "Aur detail mein batayein ki exact kya problem hai?";
+/**
+ * isValidAddress — strict check that address is real and actionable
+ * Rules:
+ *  • At least 8 characters
+ *  • At least 2 meaningful tokens (not noise/filler words)
+ *  • Must NOT be just city name + filler ("ajmer mein", "wahi hai")
+ *  • Must NOT contain only generic words like "ghar", "yahan", "wahan"
+ *  • Must NOT be a sentence about something else (e.g. "save kar do")
+ */
+const GENERIC_ONLY_WORDS = new Set([
+  'ghar','घर','yahan','यहां','yaha','wahan','वहां','waha',
+  'yahaan','wahaan','same','wahi','wahin','yahi','usi','iske',
+  'save','sev','kar','karo','karna','de','do','lo','le',
+  'bata','bol','number','naam','address','pata','jagah',
+]);
+
+function isValidAddress(text) {
+  if (!text || text.trim().length < 8) return false;
+  const t = text.trim().toLowerCase();
+
+  // Pure yes/no is not an address
+  if (isAffirmative(t) || isNegative(t)) return false;
+
+  // Sentence about saving/actions — not an address
+  if (/\b(save|sev|store|record|likho|darz|register)\b/i.test(t)) return false;
+
+  // Contains "number" alone is not an address
+  if (/^\s*(phone|mobile|contact)?\s*(number|no|num)\s*$/i.test(t)) return false;
+
+  const tokens = t.split(/\s+/).filter(w => w.length > 0);
+  if (tokens.length < 2) return false;
+
+  // Count tokens that are real address words (not noise, not generic-only, not pure digits)
+  const meaningful = tokens.filter(w =>
+    !IGNORE_WORDS.has(w) &&
+    !GENERIC_ONLY_WORDS.has(w) &&
+    w.length > 2 &&
+    !/^\d{1,3}$/.test(w)   // standalone 1-3 digit numbers are not address words
+  );
+
+  // Need at least 2 real address words (e.g. "Gandhi Nagar", "Sikar road workshop")
+  return meaningful.length >= 2;
 }
 
 /* ======================= DETECTION FUNCTIONS ======================= */
-
 function detectMachineType(text) {
   if (!text) return 'Warranty';
-  const textLower = text.toLowerCase();
-
+  const t = text.toLowerCase();
   for (const [type, keywords] of Object.entries(machineTypeKeywords)) {
-    for (const keyword of keywords) {
-      if (new RegExp(`\\b${keyword}\\b`, 'i').test(textLower)) {
-        return type;
-      }
-    }
+    if (keywords.some(k => t.includes(k.toLowerCase()))) return type;
   }
   return 'Warranty';
 }
 
-function getMachineTypeByNumber(digit) {
-  const machineTypeMap = {
-    '1': 'Warranty',
-    '2': 'JCB Care',
-    '3': 'Engine Care',
-    '4': 'Demo',
-    '5': 'BHL'
-  };
-  return machineTypeMap[digit] || 'Warranty';
-}
-
-function getMachineStatusByNumber(digit) {
-  const statusMap = {
-    '1': 'Breakdown',
-    '2': 'Running With Problem'
-  };
-  return statusMap[digit] || 'Running With Problem';
-}
-
 function detectMachineStatus(text) {
   if (!text) return 'Running With Problem';
-  const textLower = text.toLowerCase();
-
-  const breakdownKeywords = machineStatusKeywords['Breakdown'];
-  for (const keyword of breakdownKeywords) {
-    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`(^|\\s)${escapedKeyword}(\\s|$)`, 'i').test(textLower)) {
-      console.log(`✓ Machine Status: Breakdown (matched: "${keyword}")`);
-      return 'Breakdown';
-    }
-  }
-
-  const runningKeywords = machineStatusKeywords['Running With Problem'];
-  for (const keyword of runningKeywords) {
-    if (textLower.includes(keyword.toLowerCase())) {
-      console.log(`✓ Machine Status: Running With Problem (matched: "${keyword}")`);
-      return 'Running With Problem';
-    }
-  }
-
-  console.log(`⚠️ Machine Status not clearly detected, using default: Running With Problem`);
+  const t = text.toLowerCase();
+  if (machineStatusKeywords['Breakdown'].some(k => t.includes(k.toLowerCase()))) return 'Breakdown';
   return 'Running With Problem';
 }
 
 function detectJobLocation(text) {
-  if (!text) return 'Onsite';
-  const textLower = text.toLowerCase();
-
-  const workshopKeywords = jobLocationKeywords['Workshop'];
-  for (const keyword of workshopKeywords) {
-    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`(^|\\s)${escapedKeyword}`, 'i').test(textLower)) {
-      console.log(`✓ Job Location: Workshop (matched: "${keyword}")`);
-      return 'Workshop';
-    }
-  }
-
-  const onsiteKeywords = jobLocationKeywords['Onsite'];
-  for (const keyword of onsiteKeywords) {
-    if (textLower.includes(keyword.toLowerCase())) {
-      console.log(`✓ Job Location: Onsite (matched: "${keyword}")`);
-      return 'Onsite';
-    }
-  }
-
-  console.log(`⚠️ Job Location not clearly detected, using default: Onsite`);
-  return 'Onsite';
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (jobLocationKeywords['Workshop'].some(k => t.includes(k.toLowerCase()))) return 'Workshop';
+  if (jobLocationKeywords['Onsite'].some(k => t.includes(k.toLowerCase()))) return 'Onsite';
+  return null;
 }
 
 function detectComplaint(text) {
   if (!text) return null;
-  const textLower = text.toLowerCase();
-
+  const t = text.toLowerCase();
   let bestMatch = null;
   let highestScore = 0;
 
-  const sortedComplaints = Object.entries(complaintMap).sort(
-    (a, b) => (b[1].priority || 0) - (a[1].priority || 0)
-  );
-
-  for (const [category, config] of sortedComplaints) {
+  const sorted = Object.entries(complaintMap).sort((a, b) => (b[1].priority || 0) - (a[1].priority || 0));
+  for (const [category, config] of sorted) {
     let score = 0;
-
-    for (const keyword of config.keywords) {
-      const keywordLower = keyword.toLowerCase();
-      if (textLower.includes(keywordLower)) {
-        if (new RegExp(`\\b${keywordLower}\\b`, 'i').test(textLower)) {
-          score += keyword.length * 2;
-        } else {
-          score += keyword.length;
-        }
-      }
+    for (const kw of config.keywords) {
+      if (t.includes(kw.toLowerCase())) score += kw.length;
     }
+    if (score > highestScore) { highestScore = score; bestMatch = category; }
+  }
+  console.log(`🔍 Complaint Detection: "${text}" → ${bestMatch || 'NONE'} (Score: ${highestScore})`);
+  return { complaint: bestMatch, score: highestScore };
+}
 
-    if (score > highestScore) {
-      highestScore = score;
-      bestMatch = category;
+/**
+ * detectAllComplaints — returns EVERY category that scores ≥ minScore,
+ * sorted highest score first. Skips "General Problem" if any specific
+ * complaint was found (General only included when nothing else matches).
+ */
+function detectAllComplaints(text, minScore = 4) {
+  if (!text) return [];
+  const t = text.toLowerCase();
+  const results = [];
+
+  const sorted = Object.entries(complaintMap).sort((a, b) => (b[1].priority || 0) - (a[1].priority || 0));
+  for (const [category, config] of sorted) {
+    let score = 0;
+    for (const kw of config.keywords) {
+      if (t.includes(kw.toLowerCase())) score += kw.length;
+    }
+    if (score >= minScore) {
+      const sub = detectSubComplaint(category, text);
+      results.push({ complaint: category, score, subTitle: sub.subTitle });
     }
   }
 
-  return {
-    complaint: bestMatch,
-    score: highestScore
-  };
+  // Sort by score descending
+  results.sort((a, b) => b.score - a.score);
+
+  // If specific complaints found, drop "General Problem" (it's a catch-all)
+  const specific = results.filter(r => r.complaint !== "General Problem");
+  const final    = specific.length > 0 ? specific : results;
+
+  console.log(`🔍 ALL Complaints detected (${final.length}): ${final.map(r => `${r.complaint}[${r.score}]`).join(', ') || 'NONE'}`);
+  return final;
 }
 
 function detectSubComplaint(mainComplaint, text) {
-  if (!mainComplaint || !complaintMap[mainComplaint]) {
-    return { subTitle: "Other", confidence: 0.5 };
-  }
-
+  if (!mainComplaint || !complaintMap[mainComplaint]) return { subTitle: "Other", confidence: 0.5 };
   const subTitles = complaintMap[mainComplaint].subTitles;
-  if (!subTitles || Object.keys(subTitles).length === 0) {
-    return { subTitle: "Other", confidence: 1.0 };
-  }
+  if (!subTitles || Object.keys(subTitles).length === 0) return { subTitle: "Other", confidence: 1.0 };
 
-  const textLower = text.toLowerCase();
+  const t = text.toLowerCase();
   let bestMatch = null;
   let highestScore = 0;
 
   for (const [subTitle, keywords] of Object.entries(subTitles)) {
     let score = 0;
-
-    for (const keyword of keywords) {
-      const keywordLower = keyword.toLowerCase();
-      if (textLower.includes(keywordLower)) {
-        if (new RegExp(`\\b${keywordLower}\\b`, 'i').test(textLower)) {
-          score += keyword.length * 2;
-        } else {
-          score += keyword.length;
-        }
-      }
+    for (const kw of keywords) {
+      if (t.includes(kw.toLowerCase())) score += kw.length;
     }
-
-    if (score > highestScore) {
-      highestScore = score;
-      bestMatch = subTitle;
-    }
+    if (score > highestScore) { highestScore = score; bestMatch = subTitle; }
   }
-
-  return {
-    subTitle: bestMatch || "Other",
-    confidence: highestScore > 0 ? Math.min(highestScore / 15, 1) : 0.5
-  };
-}
-
-/* ======================= TEXT PROCESSING ======================= */
-
-function cleanSpeech(text) {
-  if (!text) return "";
-  return text
-    .toLowerCase()
-    .replace(/[।.,!?]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function safeAscii(text) {
-  if (!text) return "Unknown";
-  return text.replace(/[^\w\s-]/g, '').trim() || "Unknown";
+  const confidence = highestScore > 0 ? Math.min(highestScore / 15, 1) : 0.5;
+  return { subTitle: bestMatch || "Other", confidence };
 }
 
 function detectBranchAndOutlet(city) {
   if (!city) return { branch: "NA", outlet: "NA", cityCode: "NA" };
-
   const normalized = city.toLowerCase().trim();
-  return cityToBranchMap[normalized] || { branch: "NA", outlet: "NA", cityCode: "NA" };
+  // Try exact match first
+  if (cityToBranchMap[normalized]) return cityToBranchMap[normalized];
+  // Try partial match
+  for (const [key, val] of Object.entries(cityToBranchMap)) {
+    if (normalized.includes(key) || key.includes(normalized)) return val;
+  }
+  return { branch: "NA", outlet: "NA", cityCode: "NA" };
 }
 
 function formatDateForExternal(date) {
   if (!date || date === "NA") return null;
-
-  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return date;
-  }
-
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
-
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function askDTMF(twiml, text, numDigits = 1) {
-  const gather = twiml.gather({
-    input: "dtmf",
-    numDigits: numDigits,
-    timeout: 5,
-    actionOnEmptyResult: true,
-    action: "/voice/process",
-    method: "POST",
-  });
-
-  gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, text);
-}
-
-// Convert digits to Hindi words for readback
-function digitsToHindi(digits) {
-  const hindiDigits = {
-    '0': 'शून्य',
-    '1': 'एक',
-    '2': 'दो',
-    '3': 'तीन',
-    '4': 'चार',
-    '5': 'पाँच',
-    '6': 'छह',
-    '7': 'सात',
-    '8': 'आठ',
-    '9': 'नौ'
-  };
-  return digits.split('').map(d => hindiDigits[d] || d).join(' ');
-}
-
-function ask(twiml, text) {
-  const gather = twiml.gather({
-    input: "speech dtmf",
-    language: "hi-IN",
-    speechTimeout: "auto",
-    timeout: 8,
-    actionOnEmptyResult: true,
-    action: "/voice/process",
-    method: "POST",
-  });
-
-  gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, text);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function extractServiceDate(text) {
   if (!text) return null;
-
-  const cleaned = text.toLowerCase();
+  const t = text.toLowerCase();
   const today = new Date();
-
-  // Handle relative dates first
-  if (/\baaj\b|\btoday\b|\bआज\b/i.test(cleaned)) {
-    return today;
-  }
-
-  if (/\bkal\b|\btomorrow\b|\bकल\b/i.test(cleaned)) {
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow;
-  }
-
-  if (/\bparso\b|\bपरसों\b|\bपरसो\b/i.test(cleaned)) {
-    const dayAfter = new Date(today);
-    dayAfter.setDate(dayAfter.getDate() + 2);
-    return dayAfter;
-  }
-
-  // Try to extract actual date (DD/MM or DD Month format)
-  const months = {
-    'january': 1, 'jan': 1, 'जनवरी': 1,
-    'february': 2, 'feb': 2, 'फरवरी': 2,
-    'march': 3, 'mar': 3, 'मार्च': 3,
-    'april': 4, 'apr': 4, 'अप्रैल': 4,
-    'may': 5, 'मई': 5,
-    'june': 6, 'jun': 6, 'जून': 6,
-    'july': 7, 'jul': 7, 'जुलाई': 7,
-    'august': 8, 'aug': 8, 'अगस्त': 8,
-    'september': 9, 'sep': 9, 'सितंबर': 9,
-    'october': 10, 'oct': 10, 'अक्टूबर': 10,
-    'november': 11, 'nov': 11, 'नवंबर': 11,
-    'december': 12, 'dec': 12, 'दिसंबर': 12
-  };
-
-  // Try DD/MM format - "13/2", "13-2"
-  const dateMatch1 = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})/);
-  if (dateMatch1) {
-    const day = parseInt(dateMatch1[1]);
-    const month = parseInt(dateMatch1[2]);
-    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-      const date = new Date(today.getFullYear(), month - 1, day);
-      // Make sure date is not in the past
-      if (date >= today) {
-        return date;
-      }
-      // If date is in the past, assume next year
-      date.setFullYear(today.getFullYear() + 1);
-      return date;
+  if (/\b(आज|aaj|today)\b/i.test(t)) return today;
+  if (/\b(कल|kal|tomorrow)\b/i.test(t)) { const d = new Date(today); d.setDate(d.getDate()+1); return d; }
+  if (/\b(परसों|parso|parson)\b/i.test(t)) { const d = new Date(today); d.setDate(d.getDate()+2); return d; }
+  const m = t.match(/\b(\d{1,2})\s*(तारीख)?\s*(को)?\b/i);
+  if (m) {
+    const n = parseInt(m[1]);
+    if (n >= 1 && n <= 31) {
+      const d = new Date(today);
+      d.setDate(n);
+      if (d < today) d.setMonth(d.getMonth()+1);
+      return d;
     }
   }
-
-  // Try "DD Month" format - "13 february", "13 फरवरी"
-  const dateMatch2 = cleaned.match(/(\d{1,2})\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec|जनवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर)/i);
-  if (dateMatch2) {
-    const day = parseInt(dateMatch2[1]);
-    const monthName = dateMatch2[2].toLowerCase();
-    const month = months[monthName];
-    if (day >= 1 && day <= 31 && month) {
-      const date = new Date(today.getFullYear(), month - 1, day);
-      // Make sure date is not in the past
-      if (date >= today) {
-        return date;
-      }
-      // If date is in the past, assume next year
-      date.setFullYear(today.getFullYear() + 1);
-      return date;
-    }
-  }
-
   return null;
 }
 
-/* ======================= EXTERNAL API CALLS ======================= */
+/* ======================= TWIML HELPERS ======================= */
+/**
+ * askWithListening — main gather helper
+ * maxSpeechTime: total max seconds customer can speak
+ * timeout: seconds of silence before gather stops
+ */
+function askWithListening(twiml, text, options = {}) {
+  const {
+    maxSpeechTime = 60,
+    timeout = 8,
+    speechTimeout = "auto"
+  } = options;
 
-async function fetchCustomerFromExternal({ phone, chassisNo }) {
+  const gather = twiml.gather({
+    input: "speech dtmf",
+    language: "hi-IN",
+    speechTimeout,
+    timeout,
+    maxSpeechTime,
+    actionOnEmptyResult: true,
+    action: "/voice/process",
+    method: "POST",
+  });
+  gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, text);
+}
+
+function ask(twiml, text) {
+  askWithListening(twiml, text, { maxSpeechTime: 60, timeout: 8, speechTimeout: "auto" });
+}
+
+/** ask_number — extended listening for digit input (handles gaps/pauses between digit groups) */
+function askNumber(twiml, text) {
+  askWithListening(twiml, text, {
+    maxSpeechTime: 120,  // 2 min total
+    timeout: 12,          // 12 sec silence = done speaking
+    speechTimeout: "auto"
+  });
+}
+
+/* ======================= SERVICE CENTER LOCATION MATCHING ======================= */
+/**
+ * matchServiceCenter — Fuzzy match customer speech against SERVICE_CENTERS database
+ * Matches if:
+ *   1. Exact match on city_name (case-insensitive)
+ *   2. First 2+ letters match city_name
+ *   Returns matched center or null
+ */
+function matchServiceCenter(speechInput) {
+  if (!speechInput || speechInput.trim().length < 2) return null;
+  
+  const input = speechInput.trim().toLowerCase();
+  const normalized = input.replace(/[।,!?;|]/g, ' ').split(/\s+/);
+  
+  console.log(`   🔍 Matching service center for: "${speechInput}"`);
+  console.log(`   📍 Tokens: [${normalized.join(', ')}]`);
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  // Try each token against each service center
+  for (const token of normalized) {
+    if (token.length < 2) continue;  // Skip single letters
+    
+    for (const center of SERVICE_CENTERS) {
+      if (!center.is_active) continue;  // Skip inactive centers
+      
+      const centerName = center.city_name.toLowerCase();
+      
+      // Exact match
+      if (centerName === token) {
+        console.log(`   ✅ EXACT MATCH: "${token}" → ${center.city_name}`);
+        return center;
+      }
+      
+      // First 2+ letters match
+      if (centerName.startsWith(token) && token.length >= 2) {
+        const score = token.length / centerName.length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = center;
+          console.log(`   ✓ Partial match: "${token}" → ${center.city_name} (score: ${score.toFixed(2)})`);
+        }
+      }
+    }
+  }
+  
+  if (bestMatch) {
+    console.log(`   ✅ MATCHED: ${bestMatch.city_name} (Branch: ${bestMatch.branch_name}, Code: ${bestMatch.branch_code})`);
+  } else {
+    console.log(`   ❌ NO MATCH found`);
+  }
+  
+  return bestMatch;
+}
+
+/* ======================= CHASSIS NUMBER VALIDATION ======================= */
+/**
+ * isValidChassisFormat — machine numbers are 4–8 digit numeric strings
+ */
+function isValidChassisFormat(num) {
+  if (!num) return false;
+  const clean = num.replace(/\D/g, '');
+  return /^\d{4,8}$/.test(clean);
+}
+
+async function validateChassisViaAPI(chassisNo) {
   try {
-    let apiUrl = null;
-
-    if (phone && isValidPhone(phone)) {
-      apiUrl = `${EXTERNAL_API_BASE}/get_machine_by_phone_no.php?phone_no=${phone}`;
-    } else if (chassisNo && isValidChassis(chassisNo)) {
-      apiUrl = `${EXTERNAL_API_BASE}/get_machine_by_machine_no.php?machine_no=${chassisNo}`;
-    }
-
-    if (!apiUrl) {
-      console.log("⚠️ No valid identifier for external API");
-      return null;
-    }
-
-    console.log(`🌐 Fetching from API: ${apiUrl}`);
-
+    console.log(`\n🔍 API VALIDATION: ${chassisNo}`);
+    const apiUrl = `${EXTERNAL_API_BASE}/get_machine_by_machine_no.php?machine_no=${chassisNo}`;
     const response = await axios.get(apiUrl, {
       timeout: API_TIMEOUT,
       headers: API_HEADERS,
-      validateStatus: (status) => status < 500,
+      validateStatus: s => s < 500,
     });
-
-    if (
-      response.status !== 200 ||
-      !response.data ||
-      response.data.status !== 1 ||
-      !response.data.data
-    ) {
-      console.log("⚠️ API returned invalid response");
-      return null;
-    }
-
-    const customerData = response.data.data;
-
-    const normalized = {
-      chassisNo: customerData.machine_no || chassisNo || "Unknown",
-      phone: customerData.customer_phone_no || phone || "Unknown",
-      name: customerData.customer_name || "Unknown",
-      city: customerData.city || "Unknown",
-      model: customerData.machine_model || "Unknown",
-      subModel: customerData.sub_model || "NA",
-      machineType: customerData.machine_type || "Unknown",
-      businessPartnerCode: customerData.business_partner_code || "NA",
-      purchaseDate: customerData.purchase_date || "NA",
-      installationDate: customerData.installation_date || "NA",
-    };
-
-    console.log("✅ Customer data fetched successfully");
-    return normalized;
-
-  } catch (error) {
-    console.error("❌ API Fetch Error:", error.message);
-    return null;
-  }
-}
-
-/* ======================= HINDI TO ENGLISH TRANSLATION - COMPREHENSIVE ======================= */
-async function translateHindiToEnglish(text) {
-  if (!text || typeof text !== 'string') return text;
-  
-  // Check if text contains Hindi characters
-  const hindiRegex = /[\u0900-\u097F]/;
-  if (!hindiRegex.test(text)) {
-    return text; // Already in English or no Hindi detected
-  }
-
-  try {
-    console.log(`🔤 Translating to English: "${text.substring(0, 50)}..."`);
-    
-    // Comprehensive Hindi-to-English dictionary
-    const hindiToEnglishDict = {
-      // Common words
-      'नमस्ते': 'Hello',
-      'धन्यवाद': 'Thank You',
-      'कृपया': 'Please',
-      'मेरा': 'My',
-      'मेरी': 'My',
-      'नाम': 'Name',
-      'मशीन': 'Machine',
-      'खराब': 'Broken',
-      'समस्या': 'Problem',
-      'काम': 'Work',
-      'नहीं': 'No',
-      'हाँ': 'Yes',
-      'हां': 'Yes',
-      'घर': 'Home',
-      'दुकान': 'Shop',
-      'गैरेज': 'Garage',
-      'सेवा': 'Service',
-      'मरम्मत': 'Repair',
-      'गांव': 'Village',
-      'शहर': 'City',
-      'सड़क': 'Road',
-      'इंजन': 'Engine',
-      'ब्रेक': 'Brake',
-      'टायर': 'Tire',
-      'बैटरी': 'Battery',
-      'खुल्ली': 'Open',
-      'बंद': 'Closed',
-      'पानी': 'Water',
-      'तेल': 'Oil',
-      'रिसाव': 'Leakage',
-      'तेज़': 'Fast',
-      'धीमा': 'Slow',
-      'शोर': 'Noise',
-      'कंपन': 'Vibration',
-      'धुआँ': 'Smoke',
-      'चल': 'Running',
-      'बंद': 'Stop',
-      'स्टार्ट': 'Start',
-      'स्कूل': 'School',
-      'कॉलेज': 'College',
-      'फैक्ट्री': 'Factory',
-      'खेत': 'Field',
-      'मेरे': 'My',
-      'आपका': 'Your',
-      'उसका': 'His',
-      'उसकी': 'Her',
-      'हमारा': 'Our',
-      'उनका': 'Their',
-      'जो': 'Which',
-      'क्या': 'What',
-      'कब': 'When',
-      'कहाँ': 'Where',
-      'कैसे': 'How',
-      'क्यों': 'Why',
-      'कितना': 'How much',
-      'दिन': 'Day',
-      'रात': 'Night',
-      'सुबह': 'Morning',
-      'दोपहर': 'Afternoon',
-      'शाम': 'Evening',
-      'महीना': 'Month',
-      'साल': 'Year',
-      'सप्ताह': 'Week',
-      'ईंधन': 'Fuel',
-      'सर्विस': 'Service',
-      'वारंटी': 'Warranty',
-      'नुकसान': 'Damage',
-      'खतरा': 'Danger',
-      'ठीक': 'Fine',
-      'सही': 'Correct',
-      'गलत': 'Wrong',
-      'पूरा': 'Full',
-      'आधा': 'Half',
-      'पहला': 'First',
-      'दूसरा': 'Second',
-      'तीसरा': 'Third',
-      'एक': 'One',
-      'दो': 'Two',
-      'तीन': 'Three',
-      'चार': 'Four',
-      'पाँच': 'Five',
-      'छः': 'Six',
-      'सात': 'Seven',
-      'आठ': 'Eight',
-      'नौ': 'Nine',
-      'दस': 'Ten',
-      // Locations
-      'अजमेर': 'Ajmer',
-      'भरतपुर': 'Bharatpur',
-      'दिल्ली': 'Delhi',
-      'इलाहाबाद': 'Allahabad',
-      'कानपुर': 'Kanpur',
-      'लखनऊ': 'Lucknow',
-      'आगरा': 'Agra',
-      'वाराणसी': 'Varanasi',
-      'मुंबई': 'Mumbai',
-      'पुणे': 'Pune',
-      'चेन्नई': 'Chennai',
-      'कोलकाता': 'Kolkata',
-      'बेंगलुरु': 'Bangalore',
-      'हैदराबाद': 'Hyderabad',
-      'जयपुर': 'Jaipur',
-      'लुधियाना': 'Ludhiana',
-      'चंडीगढ़': 'Chandigarh',
-      'नई दिल्ली': 'New Delhi',
-      'गुड़गांव': 'Gurgaon',
-      'नोएडा': 'Noida',
-      'ग्रेटर नोएडा': 'Greater Noida',
-      'बस अड्डा': 'Bus Stand',
-      'स्टेशन': 'Station',
-      'अस्पताल': 'Hospital',
-      'पुलिस': 'Police',
-      'बाजार': 'Market',
-      'पार्क': 'Park',
-      'मंदिर': 'Temple',
-      'मस्जिद': 'Mosque',
-      'चर्च': 'Church',
-      'गुरुद्वारा': 'Gurudwara',
-      'नज़दीक': 'Near',
-      'पास': 'Near',
-      'सामने': 'Opposite',
-      'पीछे': 'Behind',
-      'ऊपर': 'Above',
-      'नीचे': 'Below',
-      'बाईं': 'Left',
-      'दाईं': 'Right',
-    };
-
-    let translatedText = text;
-    
-    // Apply dictionary translations (longest words first to avoid partial matches)
-    const sortedEntries = Object.entries(hindiToEnglishDict).sort((a, b) => b[0].length - a[0].length);
-    
-    for (const [hindi, english] of sortedEntries) {
-      const regex = new RegExp(`\\b${hindi}\\b`, 'gi');
-      translatedText = translatedText.replace(regex, english);
-    }
-
-    // Devanagari to Latin transliteration for remaining Hindi characters
-    const devanagariToLatin = {
-      'अ': 'A', 'आ': 'AA', 'इ': 'I', 'ई': 'II', 'उ': 'U', 'ऊ': 'UU', 'ऋ': 'RI', 'ए': 'E', 'ऐ': 'AI', 'ओ': 'O', 'औ': 'AU',
-      'क': 'K', 'ख': 'KH', 'ग': 'G', 'घ': 'GH', 'ङ': 'N', 'च': 'CH', 'छ': 'CHH', 'ज': 'J', 'झ': 'JH', 'ञ': 'NY', 
-      'ट': 'T', 'ठ': 'TH', 'ड': 'D', 'ढ': 'DH', 'ण': 'N', 'त': 'T', 'थ': 'TH', 'द': 'D', 'ध': 'DH', 'न': 'N', 
-      'प': 'P', 'फ': 'PH', 'ब': 'B', 'भ': 'BH', 'म': 'M', 'य': 'Y', 'र': 'R', 'ल': 'L', 'व': 'V', 
-      'श': 'SH', 'ष': 'SH', 'स': 'S', 'ह': 'H',
-      'ा': 'A', 'ि': 'I', 'ी': 'II', 'ु': 'U', 'ू': 'UU', 'ृ': 'RI', 'े': 'E', 'ै': 'AI', 'ो': 'O', 'ौ': 'AU',
-      'ः': 'H', 'ँ': 'N', 'ं': 'N',
-      '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9'
-    };
-
-    // Apply transliteration for any remaining Devanagari characters
-    for (const [devanagari, latin] of Object.entries(devanagariToLatin)) {
-      const regex = new RegExp(devanagari, 'g');
-      translatedText = translatedText.replace(regex, latin);
-    }
-
-    // Clean up: remove extra spaces and special characters
-    translatedText = translatedText.replace(/\s+/g, ' ').trim();
-    translatedText = translatedText.replace(/[^a-zA-Z0-9\s\-\.]/g, ''); // Remove non-ASCII except space, dash, dot
-
-    if (translatedText && translatedText !== text) {
-      console.log(`✅ Translated: "${translatedText.substring(0, 50)}..."`);
-      return translatedText;
-    }
-
-    console.log(`⚠️ Could not fully translate: "${text.substring(0, 50)}..."`);
-    return translatedText || text;
-
-  } catch (error) {
-    console.error("❌ Translation Error:", error.message);
-    return text;
-  }
-}
-function mergeLocationAndPincode(address, pincode) {
-  if (!address && !pincode) return "Not Provided";
-  if (!address) return pincode;
-  if (!pincode) return address;
-  
-  // Merge with comma separator
-  return `${address}, ${pincode}`;
-}
-
-/* ======================= FORMAT TIME TO 12-HOUR WITH AM/PM ======================= */
-function formatTimeToTwelveHour(timeString) {
-  if (!timeString) return "";
-  
-  // If already in HH:MM AM/PM format, return as-is
-  if (/\d{1,2}:\d{2}\s*(AM|PM)/.test(timeString)) {
-    return timeString;
-  }
-  
-  // Extract time from different formats
-  const match = timeString.match(/(\d{1,2}):?(\d{2})?/);
-  if (!match) return timeString;
-  
-  let hour = parseInt(match[1]);
-  const minute = match[2] || '00';
-  
-  // Ensure PM times are in 24-hour format first if needed
-  const isPM = hour > 12 || /pm|evening|shaam|duphare/.test(timeString.toLowerCase());
-  
-  if (isPM && hour <= 12) {
-    hour = hour === 12 ? 12 : hour + 12;
-  }
-  
-  // Convert back to 12-hour format
-  const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
-  const period = hour >= 12 ? 'PM' : 'AM';
-  
-  return `${String(displayHour).padStart(2, '0')}:${minute} ${period}`;
-}
-
-async function submitComplaintToExternal(complaintData) {
-  try {
-    console.log("\n" + "=".repeat(120));
-    console.log("🌐 SUBMITTING COMPLAINT TO EXTERNAL API");
-    console.log("=".repeat(120));
-    console.log("📤 REQUEST DATA:");
-    console.log(JSON.stringify(complaintData, null, 2));
-    console.log("=".repeat(120));
-
-    const response = await axios.post(COMPLAINT_API_URL, complaintData, {
-      timeout: API_TIMEOUT,
-      headers: {
-        "Content-Type": "application/json",
-        ...API_HEADERS
-      },
-      validateStatus: (status) => status < 500,
-    });
-
-    console.log("\n" + "=".repeat(120));
-    console.log("📥 API RESPONSE:");
-    console.log("=".repeat(120));
-    console.log(`Status Code: ${response.status}`);
-    console.log(`Response Data: ${JSON.stringify(response.data, null, 2)}`);
-    console.log("=".repeat(120) + "\n");
-
-    if (
-      response.status !== 200 ||
-      !response.data ||
-      response.data.status !== 1
-    ) {
-      console.log("⚠️ API Rejected:", response.data?.message || "Unknown error");
+    if (response.status === 200 && response.data?.status === 1 && response.data?.data) {
+      const d = response.data.data;
+      console.log(`   ✅ VALID — Customer: ${d.customer_name}, City: ${d.city}`);
       return {
-        success: false,
-        error: response.data?.message || "API rejected"
+        valid: true,
+        data: {
+          name:                d.customer_name         || "Unknown",
+          city:                d.city                  || "Unknown",
+          model:               d.machine_model         || "Unknown",
+          machineNo:           d.machine_no            || chassisNo,
+          phone:               d.customer_phone_no     || "Unknown",
+          subModel:            d.sub_model             || "NA",
+          machineType:         d.machine_type          || "Warranty",
+          businessPartnerCode: d.business_partner_code || "NA",
+          purchaseDate:        d.purchase_date         || "NA",
+          installationDate:    d.installation_date     || "NA",
+        }
       };
     }
-
-    const sapId = response.data.data?.complaint_sap_id ||
-                  response.data.data?.sap_id ||
-                  null;
-
-    console.log("✅ Complaint submitted successfully. SAP ID:", sapId);
-
-    return {
-      success: true,
-      data: response.data,
-      sapId
-    };
-
-  } catch (error) {
-    console.error("❌ Submit Error:", error.message);
-    console.error("Error Details:", error.response?.data || error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.log(`   ⚠️ NOT FOUND`);
+    return { valid: false, reason: "Not found in database" };
+  } catch (e) {
+    console.error(`   ❌ API ERROR: ${e.message}`);
+    return { valid: false, reason: "API error", error: e.message };
   }
 }
 
-/* ======================= SAVE COMPLAINT ======================= */
-
-async function saveComplaint(twiml, callData) {
+/* ======================= EXTERNAL API — SUBMIT COMPLAINT ======================= */
+async function submitComplaintToExternal(complaintData) {
   try {
-    const customerData = callData.customerData;
-    const branchOutlet = detectBranchAndOutlet(customerData.city);
-
-    const installationDate = customerData.installationDate &&
-                            customerData.installationDate !== "NA"
-      ? formatDateForExternal(customerData.installationDate)
-      : null;
-
-    // Translate Hindi fields to English before creating complaint data
-    const translatedCallerName = await translateHindiToEnglish(callData.callerName || "Not Provided");
-    const translatedComplaintDetails = await translateHindiToEnglish(callData.rawComplaint || "Not provided");
-    const translatedAddress = await translateHindiToEnglish(callData.address || "Not Provided");
-    const translatedJobLocation = await translateHindiToEnglish(callData.jobLocation || "Onsite");
-    const translatedMachineStatus = await translateHindiToEnglish(callData.machineStatus || "Running With Problem");
-    const translatedMachineType = await translateHindiToEnglish(callData.machineType || "Warranty");
-    const translatedComplaintTitle = await translateHindiToEnglish(callData.complaintTitle || "General Problem");
-    const translatedComplaintSubTitle = await translateHindiToEnglish(callData.complaintSubTitle || "Other");
-
-    // Merge address and pincode into single machine_location field
-    const mergedLocation = mergeLocationAndPincode(translatedAddress, callData.pincode || "");
-    
-    // Format times to 12-hour with PM
-    const formattedFromTime = formatTimeToTwelveHour(callData.fromTime || "");
-    const formattedToTime = formatTimeToTwelveHour(callData.toTime || "");
-
-    const complaintApiData = {
-      machine_no: callData.chassis || "Unknown",
-      customer_name: safeAscii(customerData.name),
-      caller_name: translatedCallerName,
-      caller_no: callData.callerPhone || customerData.phone,
-      contact_person: translatedCallerName,
-      contact_person_number: callData.callerPhone || customerData.phone,
-      machine_model: customerData.machineType || "Unknown",
-      sub_model: customerData.model || "NA",
-      installation_date: installationDate || "2025-01-01",
-      machine_type: translatedMachineType,
-      city_id: branchOutlet.cityCode,
-      complain_by: "Customer",
-      machine_status: translatedMachineStatus,
-      job_location: translatedJobLocation,
-      branch: branchOutlet.branch,
-      outlet: branchOutlet.outlet,
-      complaint_details: translatedComplaintDetails,
-      complaint_title: translatedComplaintTitle,
-      sub_title: translatedComplaintSubTitle,
-      business_partner_code: customerData.businessPartnerCode || "NA",
-      complaint_sap_id: "NA",
-      machine_location: mergedLocation,
-      service_date: callData.serviceDate
-        ? formatDateForExternal(callData.serviceDate)
-        : "",
-      from_time: formattedFromTime,
-      to_time: formattedToTime,
-      job_close_lat: "0.000000",
-      job_close_lng: "0.000000",
-      job_open_lat: "0.000000",
-      job_open_lng: "0.000000",
+    // IMPORTANT: Only convert name fields (customer data from API is already ASCII).
+    // DO NOT run convertHindiToEnglish on complaint_details or machine_location_address
+    // — it corrupts Hindi speech to unreadable letter-by-letter transliteration
+    // e.g. "हाइड्रोलिक" → "H ID R L K" which the API rejects.
+    const sanitized = {
+      ...complaintData,
+      customer_name:  safeAscii(complaintData.customer_name  || ""),
+      caller_name:    safeAscii(complaintData.caller_name    || ""),
+      contact_person: safeAscii(complaintData.contact_person || ""),
+      // complaint_details, machine_location_address, job_location → keep as-is
     };
 
-    // ===== LOG API DATA IN ENGLISH BEFORE SENDING =====
-    console.log("\n" + "=".repeat(120));
-    console.log("📤 SENDING TO EXTERNAL API - ALL DATA IN ENGLISH");
-    console.log("=".repeat(120));
-    console.log(`📱 Caller Name: ${translatedCallerName}`);
-    console.log(`☎️  Contact Person: ${translatedCallerName}`);
-    console.log(`📍 Machine Location: ${mergedLocation}`);
-    console.log(`🔴 Machine Status: ${translatedMachineStatus}`);
-    console.log(`🏢 Service Plan: ${translatedMachineType}`);
-    console.log(`🎯 Complaint: ${translatedComplaintTitle}`);
-    console.log(`📝 Sub-Complaint: ${translatedComplaintSubTitle}`);
-    console.log(`💬 Description: ${translatedComplaintDetails.substring(0, 80)}...`);
-    console.log(`📅 Date: ${complaintApiData.service_date}`);
-    console.log(`⏰ Time: ${formattedFromTime} - ${formattedToTime}`);
-    console.log("=".repeat(120) + "\n");
+    console.log("\n📤 SUBMITTING COMPLAINT:");
+    console.log(JSON.stringify(sanitized, null, 2));
 
-    // Submit to external API
-    const externalResult = await submitComplaintToExternal(complaintApiData);
-    let sapId = null;
+    const response = await axios.post(COMPLAINT_API_URL, sanitized, {
+      timeout: API_TIMEOUT,
+      headers: { "Content-Type": "application/json", ...API_HEADERS },
+      validateStatus: s => s < 500,
+    });
 
-    if (externalResult.success) {
-      sapId = externalResult.sapId;
-      console.log("✅ Data successfully posted to external API");
-    } else {
-      console.log("⚠️ External API submission failed:", externalResult.error);
+    if (response.status !== 200 || !response.data || response.data.status !== 1) {
+      console.log("⚠️ API Rejected:", response.data?.message || "Unknown error");
+      return { success: false, error: response.data?.message || "API rejected" };
     }
 
-    const complaintDbData = {
-      machineNo: callData.chassis || "Unknown",
-      chassisNo: callData.chassis || "Unknown",
-      customerName: safeAscii(customerData.name),
-      registeredPhone: customerData.phone || "Unknown",
-      machineModel: customerData.model || "Unknown",
-      machineType: translatedMachineType,
-      machineStatus: translatedMachineStatus,
-      jobLocation: translatedJobLocation,
-      complaintGivenByName: translatedCallerName,
-      complaintGivenByPhone: callData.callerPhone || "Unknown",
-      machineInstallationDate: installationDate ? new Date(installationDate) : null,
-      description_raw: translatedComplaintDetails,
-      complaintTitle: translatedComplaintTitle,
-      complaintSubTitle: translatedComplaintSubTitle,
-      complaintSapId: sapId || null,
-      branch: branchOutlet.branch,
-      outlet: branchOutlet.outlet,
-      source: "IVR_VOICE_BOT",
-      machineLocationAddress: translatedAddress,
-      machineLocationPincode: callData.pincode || "",
-      serviceDate: callData.serviceDate || null,
-      fromTime: callData.fromTime || "",
-      toTime: callData.toTime || "",
-    };
-
-    // ===== LOG DATABASE DATA IN ENGLISH BEFORE SAVING =====
-    console.log("\n" + "=".repeat(120));
-    console.log("💾 SAVING TO DATABASE - COMPLAINT DATA IN ENGLISH");
-    console.log("=".repeat(120));
-    console.log(`🔧 Machine Number: ${complaintDbData.machineNo}`);
-    console.log(`👤 Caller Name (English): ${complaintDbData.complaintGivenByName}`);
-    console.log(`📍 Location (English): ${complaintDbData.machineLocationAddress}`);
-    console.log(`📮 Pincode: ${complaintDbData.machineLocationPincode}`);
-    console.log(`🎯 Complaint (English): ${complaintDbData.complaintTitle} → ${complaintDbData.complaintSubTitle}`);
-    console.log(`💬 Description (English): ${complaintDbData.description_raw.substring(0, 80)}...`);
-    console.log(`📅 Service Date: ${complaintDbData.serviceDate}`);
-    console.log("=".repeat(120) + "\n");
-
-    // Save to MongoDB
-    console.log("\n" + "=".repeat(120));
-    console.log("💾 SAVING COMPLAINT TO DATABASE");
-    console.log("=".repeat(120));
-    console.log("📝 DATABASE PAYLOAD:");
-    console.log(JSON.stringify(complaintDbData, null, 2));
-    console.log("=".repeat(120));
-
-    const savedComplaint = await Complaint.create(complaintDbData);
-    
-    console.log("\n" + "=".repeat(120));
-    console.log("✅ COMPLAINT SUCCESSFULLY SAVED TO DATABASE");
-    console.log("=".repeat(120));
-    console.log(`Database ID: ${savedComplaint._id}`);
-    console.log(`SAP ID: ${sapId}`);
-    console.log(`Machine: ${callData.chassis}`);
-    console.log(`Customer: ${customerData.name}`);
-    console.log(`Type: ${callData.machineType}`);
-    console.log(`Status: ${callData.machineStatus}`);
-    console.log("=".repeat(120) + "\n");
-
-    return { success: true, sapId };
-
-  } catch (error) {
-    console.error("\n" + "❌".repeat(60));
-    console.error("DATABASE ERROR:", error.message);
-    console.error("❌".repeat(60) + "\n");
-    return { success: false, error: error.message };
+    const sapId = response.data.data?.complaint_sap_id || response.data.data?.sap_id || null;
+    console.log("✅ Submitted. SAP ID:", sapId);
+    return { success: true, data: response.data, sapId };
+  } catch (e) {
+    console.error("❌ Submit Error:", e.message);
+    return { success: false, error: e.message };
   }
 }
 
-/* ======================= INCOMING CALL HANDLER ======================= */
+async function saveComplaint(callData) {
+  try {
+    const customer      = callData.customerData;
+    const installDate   = customer.installationDate && customer.installationDate !== "NA"
+      ? formatDateForExternal(customer.installationDate) : null;
 
+    // ── Use auto-fetched location data from SERVICE_CENTERS matching ──
+    const branch    = callData.branch   || "NA";
+    const outlet    = callData.outlet   || "NA";
+    const city_id   = callData.city_id  || "NA";
+    const lat       = callData.lat      || 0;
+    const lng       = callData.lng      || 0;
+
+    // ── Multi-complaint: join all titles & sub-titles for API ──
+    const allComplaints = callData.allComplaints || [];
+    const primaryComplaint = allComplaints[0] || { complaint: callData.complaintTitle || "General Problem", subTitle: callData.complaintSubTitle || "Other" };
+    const allTitles    = allComplaints.length > 1
+      ? allComplaints.map(c => c.complaint).join(" | ")
+      : primaryComplaint.complaint;
+    const allSubTitles = allComplaints.length > 1
+      ? allComplaints.map(c => c.subTitle).join(" | ")
+      : primaryComplaint.subTitle;
+
+    console.log(`📋 Complaint title(s) for API: "${allTitles}"`);
+    console.log(`📋 Sub-title(s) for API:       "${allSubTitles}"`);
+    console.log(`📍 Location: Branch=${branch}, Outlet=${outlet}, City_ID=${city_id}`);
+
+    const payload = {
+      machine_no:               callData.chassis          || "Unknown",
+      customer_name:            safeAscii(customer.name),
+      caller_name:              customer.name             || "Not Provided",
+      caller_no:                callData.callerPhone      || customer.phone || "Unknown",
+      contact_person:           customer.name             || "Customer",
+      contact_person_number:    callData.callerPhone      || customer.phone || "Unknown",
+      machine_model:            customer.machineType      || "Unknown",
+      sub_model:                customer.model            || "NA",
+      installation_date:        installDate               || "2025-01-01",
+      machine_type:             callData.machineType      || "Warranty",
+      city_id:                  city_id,
+      complain_by:              "Customer",
+      machine_status:           callData.machineStatus    || "Running With Problem",
+      job_location:             callData.jobLocation      || "Onsite",
+      branch:                   branch,
+      outlet:                   outlet,
+      complaint_details:        callData.rawComplaint     || "Not provided",
+      complaint_title:          allTitles,
+      sub_title:                allSubTitles,
+      business_partner_code:    customer.businessPartnerCode || "NA",
+      complaint_sap_id:         "NA",
+      machine_location_address: callData.engineerAddress  || "Not Provided",
+      pincode:                  callData.pincode          || "0",
+      service_date:             callData.serviceDate ? formatDateForExternal(callData.serviceDate) : "",
+      from_time:                callData.fromTime         || "",
+      to_time:                  callData.toTime           || "",
+      job_open_lat:             lat,
+      job_open_lng:             lng,
+      job_close_lat:            0,
+      job_close_lng:            0,
+    };
+
+    return await submitComplaintToExternal(payload);
+  } catch (e) {
+    console.error("❌ saveComplaint error:", e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/* =====================================================================
+   ROUTES
+   ===================================================================== */
+
+/* ---------- ENTRY POINT ---------- */
 router.post("/", async (req, res) => {
   const { CallSid, From } = req.body;
   const twiml = new VoiceResponse();
@@ -1417,1467 +1031,719 @@ router.post("/", async (req, res) => {
     from: From,
     step: "ivr_menu",
     retries: 0,
+    partialMachineNo: "",   // accumulates digit groups for machine number
+    partialPhoneNo: "",     // accumulates digit groups for phone
+    customerData: null,
   });
 
   const gather = twiml.gather({
     input: "dtmf",
     numDigits: 1,
-    timeout: 5,
+    timeout: 6,
     action: "/voice/process",
     method: "POST",
   });
-
   gather.say(
     { voice: "Polly.Aditi", language: "hi-IN" },
-    "नमस्ते! राजेश JCB मोटर्स में आपका स्वागत है। कृपया हैं। आपकी कॉल दर्ज की जा रही है। Complaint register करने के लिए एक दबाएं। अगर आप किसी agent से बात करना चाहते हैं तो दो दबाएं।"
-    // "Namaste! Rajesh JCB Motors mein aapka swagat hai. Complaint register karne ke liye ek dabayein. Agar aap kisi agent se baat karna chahte hain to do dabayien."
+    "Namaskar! Aapka Rajesh Motors mein bahut bahut swagat hai. Agar aapki machine mein koi taklif hai aur complaint darz karwani hai, to ek dabayein. Agar aap seedha humare kisi sahayak se baat karna chahte hain, to do dabayein."
   );
 
   res.type("text/xml").send(twiml.toString());
 });
 
-/* ======================= MAIN PROCESSING HANDLER ======================= */
-
+/* ======================= MAIN PROCESS HANDLER ======================= */
 router.post("/process", async (req, res) => {
   try {
     const twiml = new VoiceResponse();
     const { CallSid, Digits, SpeechResult } = req.body;
 
     let callData = activeCalls.get(CallSid);
-
     if (!callData) {
-      callData = {
-        callSid: CallSid,
-        step: "ivr_menu",
-        retries: 0,
-      };
+      callData = { callSid: CallSid, step: "ivr_menu", retries: 0, partialMachineNo: "", partialPhoneNo: "" };
       activeCalls.set(CallSid, callData);
     }
 
+    // Silence / empty input — repeat last question
     if (!SpeechResult && !Digits) {
-      const lastQ = callData.lastQuestion || "Kripya apna jawab bolein.";
+      const lastQ = callData.lastQuestion || "Bhai sahab, zara dobara boliye, main sun raha hoon.";
       ask(twiml, lastQ);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
-    // ===== IVR MENU =====
-    if (callData.step === "ivr_menu") {
-      if (Digits === "2") {
-        twiml.say(
-          { voice: "Polly.Aditi", language: "hi-IN" },
-          "ठीक है। आपको एजेंट से जोड़ा जा रहा है।"
-        );
-        twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-        activeCalls.delete(CallSid);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "1") {
-        callData.step = "ask_identifier";
-        callData.retries = 0;
-        callData.lastQuestion = "कृपया अपना मशीन नंबर या फोन नंबर बोलिए या दर्ज करें। दर्ज करते समय पूरा होने पर हैश दबाएँ।";
-        const gather = twiml.gather({
-          input: "dtmf speech",
-          hints: "machine number, phone number, chassis, मशीन नंबर, फोन नंबर, चेसिस",
-          finishOnKey: "#",
-          timeout: 30,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      askDTMF(twiml, "कृपया एक या दो दबाइए।", 1);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
     const rawSpeech = cleanSpeech(SpeechResult || "");
 
-    console.log("\n" + "=".repeat(120));
-    console.log(`📞 CALL: ${CallSid} | STEP: ${callData.step}`);
-    console.log(`🎤 CUSTOMER: "${SpeechResult}" || 🔢 DIGITS: "${Digits}"`);
-    console.log(`🧹 CLEANED: "${rawSpeech}"`);
-    console.log("=".repeat(120));
+    console.log(`\n${'═'.repeat(70)}`);
+    console.log(`📞 [${CallSid.substring(0, 10)}] STEP: ${callData.step} | RETRY: ${callData.retries}`);
+    console.log(`🎤 Speech: "${SpeechResult}"`);
+    console.log(`🧹 Cleaned: "${rawSpeech}"`);
+    console.log(`${'═'.repeat(70)}`);
 
-    // ===== CONFIRM MACHINE NUMBER =====
-    if (callData.step === "confirm_identifier") {
-      if (Digits === "1") {
-        // User confirmed the number is correct
-        console.log(`✅ User confirmed number: ${callData.lastAttemptedNumber}`);
-        callData.step = "ask_identifier";
-        callData.identifier = callData.lastAttemptedNumber;
-        // Continue with the rest of ask_identifier logic (fetch from API, etc.)
-        // Trigger re-entry by continuing to next handler
-        const identifier = callData.lastAttemptedNumber;
-        callData.chassis = identifier;
-        
-        // Now fetch from API
-        const customerData = await fetchCustomerFromExternal({ 
-          phone: /^\d{10}$/.test(identifier) ? identifier : null,
-          chassisNo: !/^\d{10}$/.test(identifier) ? identifier : null
-        });
-
-        if (!customerData) {
-          console.log("❌ Machine not found in API database even after confirmation");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "इस नंबर की मशीन हमारे पास नहीं है। आपको एजेंट से जोड़ा जा रहा है।"
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.chassis = identifier;
-        callData.customerData = customerData;
-        callData.isRegistered = true;
-        callData.step = "ask_caller_name";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है! मशीन का रिकॉर्ड मिल गया। अब अपना पूरा नाम बताइए, कृपया।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else if (Digits === "2") {
-        // User said the number is incorrect
-        console.log(`❌ User rejected number: ${callData.lastAttemptedNumber} - Asking to re-enter`);
-        callData.step = "ask_identifier";
-        callData.retries = 0;
-        callData.lastAttemptedNumber = null;
-        callData.lastQuestion = "कोई बात नहीं। कृपया सही मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।";
-        const gather = twiml.gather({
-          input: "dtmf speech",
-          hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
-          finishOnKey: "#",
-          timeout: 30,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        // Invalid input
-        askDTMF(twiml, "कृपया एक दबाइए सही है तो, दो दबाइए गलत है तो।", 1);
+    /* ──────────────────────────────────────────────────────
+       STEP 0: IVR MENU
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ivr_menu") {
+      if (!Digits) {
+        ask(twiml, "Bhai sahab, complaint ke liye ek dabayein, aur seedha baat karne ke liye do dabayein.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
+      if (Digits === "2") {
+        twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Ji bilkul. Hum aapko abhi humare sahayak se jod rahe hain. Thodi der ruke, aapka kaam zaroor hoga.");
+        twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
+        activeCalls.delete(CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      if (Digits === "1") {
+        callData.step = "ask_machine_no";
+        callData.retries = 0;
+        callData.partialMachineNo = "";
+        callData.lastQuestion = "Theek hai ji. Pehle aapki machine ka number chahiye. Machine par ek number likha hota hai, woh dhire dhire ek ek karke boliye. Jaise: teen, paanch, do, saat. Koi jaldi nahi hai, aaram se boliye.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      ask(twiml, "Maafi chahta hoon, yeh button nahi mila. Complaint ke liye ek dabayein, baat ke liye do dabayein.");
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK IDENTIFIER FOR NON-REGISTERED =====
-    if (callData.step === "ask_identifier") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating last question");
-        const gather = twiml.gather({
-          input: "dtmf speech",
-          hints: "machine number, phone number, chassis, मशीन नंबर, फोन नंबर",
-          finishOnKey: "#",
-          timeout: 30,
-          numDigits: 1,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
+    /* ──────────────────────────────────────────────────────
+       STEP 1: ASK MACHINE NUMBER
+       Smart digit accumulation:
+         • If customer speaks in groups (slow/pauses), accumulate across turns
+         • If a validation just failed, FRESH START — don't blend old digits
+         • If total digits > 8, try all sliding windows (rightmost first)
+           before giving up — handles the "overflow + wrong combo" case
+         • Total hard-retry limit = 4 across entire machine-no session
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ask_machine_no") {
+      const newDigits = extractOnlyDigits(rawSpeech);
+      console.log(`   🔢 New digits this turn: "${newDigits}"`);
+      console.log(`   📦 Partial buffer: "${callData.partialMachineNo}" | FreshStart: ${!!callData.machineNoFreshStart}`);
+
+      // ── After a failed validation, the NEXT turn always starts a clean buffer ──
+      if (callData.machineNoFreshStart) {
+        callData.partialMachineNo  = "";
+        callData.machineNoFreshStart = false;
       }
 
-      // Check if user provided DTMF digits (chassis/phone number)
-      let inputToProcess = rawSpeech;
-      
-      if (Digits && Digits.trim().length > 0) {
-        console.log(`🔢 Processing DTMF input: "${Digits}"`);
-        // Strip leading # if present (from #number# format)
-        let cleanedDigits = Digits.trim();
-        if (cleanedDigits.startsWith('#')) {
-          cleanedDigits = cleanedDigits.substring(1);
-        }
-        // Strip trailing # if present
-        if (cleanedDigits.endsWith('#')) {
-          cleanedDigits = cleanedDigits.substring(0, cleanedDigits.length - 1);
-        }
-        inputToProcess = cleanedDigits;
-        console.log(`🔧 Cleaned DTMF: "${inputToProcess}"`);
-      }
+      callData.partialMachineNo = (callData.partialMachineNo || "") + newDigits;
+      const accumulated = callData.partialMachineNo;
+      console.log(`   ➕ Total buffer: "${accumulated}" (${accumulated.length} digits)`);
 
-      // If no input at all
-      if (!inputToProcess || inputToProcess.trim().length === 0) {
-        callData.retries = (callData.retries || 0) + 1;
-        console.log(`⚠️ No input received - Retry ${callData.retries}/3`);
+      /* ---- helper: try to validate one candidate, return result or null ---- */
+      const tryCandidate = async (candidate) => {
+        if (!/^\d{4,8}$/.test(candidate)) return null;
+        const r = await validateChassisViaAPI(candidate);
+        return r.valid ? r : null;
+      };
 
-        if (callData.retries >= 3) {
-          console.log("❌ No input received after 3 retries - Escalating");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Samajh nahi paye. Aapko agent se connect kar rahe hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
+      /* ---- build ordered candidate list from the accumulated digit string ---- */
+      const buildCandidates = (buf) => {
+        const seen = new Set();
+        const list = [];
+        const add = (s) => { if (s && !seen.has(s) && /^\d{4,8}$/.test(s)) { seen.add(s); list.push(s); } };
 
-        callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।`;
-        const gather = twiml.gather({
-          input: "dtmf speech",
-          hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
-          finishOnKey: "#",
-          timeout: 30,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
+        // Exact match first (only when 4–8 digits)
+        if (buf.length >= 4 && buf.length <= 8) add(buf);
 
-      // Try to extract identifier from input (speech or DTMF)
-      let chassis = null;
-      let phone = null;
-
-      // Keep full input as typed - don't remove duplicate digits
-      let cleanedInput = inputToProcess;
-      console.log(`📌 Numeric input detected: "${cleanedInput}"`);
-      
-      // If it looks like DTMF digits only, try both extraction methods
-      if (/^\d+$/.test(cleanedInput)) {
-        chassis = extractChassisNumberV2(cleanedInput);
-        phone = extractPhoneNumberV2(cleanedInput);
-      } else {
-        // Mixed speech input
-        chassis = extractChassisNumberV2(cleanedInput);
-        phone = extractPhoneNumberV2(cleanedInput);
-      }
-
-      console.log(`✓ Extracted - Chassis: ${chassis || "N/A"} | Phone: ${phone || "N/A"}`);
-
-      let identifier = null;
-      if (chassis && isValidChassis(chassis)) {
-        identifier = chassis;
-        console.log(`✅ Using Chassis: ${identifier}`);
-      } else if (phone && isValidPhone(phone)) {
-        identifier = phone;
-        console.log(`✅ Using Phone: ${identifier}`);
-      }
-
-      if (!identifier) {
-        callData.retries = (callData.retries || 0) + 1;
-        console.log(`⚠️ Invalid identifier extracted - Retry ${callData.retries}/3`);
-
-        if (callData.retries >= 3) {
-          console.log("❌ No valid identifier found after 3 retries - Fetching from API with raw input");
-          
-          // Try direct API fetch with the raw input
-          let apiUrl = null;
-          if (/^\d{10}$/.test(inputToProcess)) {
-            apiUrl = `${EXTERNAL_API_BASE}/get_machine_by_phone_no.php?phone_no=${inputToProcess}`;
-            console.log(`🌐 Trying Phone API: ${apiUrl}`);
-          } else if (inputToProcess.length >= 7) {
-            apiUrl = `${EXTERNAL_API_BASE}/get_machine_by_machine_no.php?machine_no=${inputToProcess}`;
-            console.log(`🌐 Trying Chassis API: ${apiUrl}`);
+        // Sliding windows: rightmost preferred (last spoken = most recent attempt)
+        for (let len = Math.min(8, buf.length); len >= 4; len--) {
+          add(buf.slice(-len));           // from right
+          add(buf.slice(0, len));         // from left
+          // middle windows
+          for (let start = 1; start + len <= buf.length; start++) {
+            add(buf.slice(start, start + len));
           }
+        }
+        return list;
+      };
 
-          if (apiUrl) {
-            try {
-              const response = await axios.get(apiUrl, {
-                timeout: API_TIMEOUT,
-                headers: API_HEADERS,
-                validateStatus: (status) => status < 500,
-              });
-
-              if (response.status === 200 && response.data?.status === 1 && response.data?.data) {
-                console.log("✅ Found in API with raw input!");
-                identifier = cleanedInput;
-              } else {
-                console.log("❌ API returned no data - Asking for confirmation");
-                // Give user a chance to confirm the number they entered
-                callData.retries = (callData.retries || 0) + 1;
-                callData.lastAttemptedNumber = cleanedInput;
-                
-                if (callData.retries >= 3) {
-                  console.log("❌ Machine not found after 2 retries - Escalating");
-                  twiml.say(
-                    { voice: "Polly.Aditi", language: "hi-IN" },
-                    `माफ कीजिए, मशीन नंबर ${digitsToHindi(cleanedInput)} हमारे रिकॉर्ड में नहीं मिल रहा। आपको एजेंट से जोड़ा जा रहा है।`
-                  );
-                  twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-                  activeCalls.delete(CallSid);
-                  return res.type("text/xml").send(twiml.toString());
-                } else {
-                  // Ask user to confirm the number
-                  callData.step = "confirm_identifier";  // Set to confirmation step
-                  callData.lastAttemptedNumber = cleanedInput;
-                  callData.lastQuestion = `आपका मशीन नंबर है: ${digitsToHindi(cleanedInput)}। कृपया पुष्टि करें - यह सही है तो एक दबाइए, गलत है तो दो दबाइए।`;
-                  askDTMF(twiml, callData.lastQuestion, 1);
-                  activeCalls.set(CallSid, callData);
-                  return res.type("text/xml").send(twiml.toString());
-                }
-              }
-            } catch (error) {
-              console.error("❌ API Error:", error.message);
-              callData.retries = (callData.retries || 0) + 1;
-              
-              if (callData.retries >= 3) {
-                twiml.say(
-                  { voice: "Polly.Aditi", language: "hi-IN" },
-                  "सर्वर में समस्या है। आपको एजेंट से जोड़ा जा रहा है।"
-                );
-                twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-                activeCalls.delete(CallSid);
-                return res.type("text/xml").send(twiml.toString());
-              } else {
-                callData.lastQuestion = `कृपया मशीन नंबर दोबारा बोलिए या दर्ज करें, फिर हैश (#) key दबाइए। (प्रयास ${callData.retries}/2)`;
-                const gather = twiml.gather({
-                  input: "dtmf speech",
-                  hints: "machine number, chassis, मशीन नंबर, चेसिस",
-                  finishOnKey: "#",
-                  timeout: 30,
-                  actionOnEmptyResult: true,
-                  action: "/voice/process",
-                  method: "POST",
-                });
-                gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-                activeCalls.set(CallSid, callData);
-                return res.type("text/xml").send(twiml.toString());
-              }
-            }
-          } else {
-            twiml.say(
-              { voice: "Polly.Aditi", language: "hi-IN" },
-              "हम आपकी पहचान समझ नहीं पाए। आपको एजेंट से जोड़ा जा रहा है।"
-            );
-            twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+      // ── Not enough digits yet — ask for more ──────────────────────────────
+      if (accumulated.length < 4) {
+        if (accumulated.length === 0) {
+          callData.retries = (callData.retries || 0) + 1;
+          if (callData.retries >= 4) {
+            twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Number samajh nahi aaya. Agent se connect kar rahe hain.");
+            twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
             activeCalls.delete(CallSid);
             return res.type("text/xml").send(twiml.toString());
           }
-        }
-
-        if (!identifier) {
-          callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/3: मशीन नंबर या फोन नंबर बोलिए या दर्ज करें।`;
-          const gather = twiml.gather({
-            input: "dtmf speech",
-            hints: "machine number, phone number, मशीन नंबर, फोन नंबर",
-            finishOnKey: "#",
-            timeout: 30,
-            actionOnEmptyResult: true,
-            action: "/voice/process",
-            method: "POST",
-          });
-          gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
+          const noDigitHints = [
+            "Bhai sahab, sirf number boliye. Jaise: teen, teen, shunya, paanch, chaar, chaar, saat. Ek ek karke boliye.",
+            "Machine par ek plate lagti hai jis par number likha hota hai. Usi number ko ek ek digit karke boliye.",
+            "Koi baat nahi, aaram se boliye. Hindi mein bhi bol sakte hain — ek, do, teen, chaar, paanch, chhah, saat, aath, nau, shunya."
+          ];
+          callData.lastQuestion = noDigitHints[Math.min(callData.retries - 1, 2)];
+          askNumber(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
+        // Some digits received, not enough — ask for rest without resetting buffer
+        console.log(`   ⏳ Only ${accumulated.length} digit(s) — waiting for more`);
+        callData.lastQuestion = `${accumulated.split('').join(' ')} aaya. Ab baaki digits boliye.`;
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
       }
 
-      // ===== FETCH MACHINE DATA FROM API =====
-      console.log("\n" + "=".repeat(120));
-      console.log(`🌐 FETCHING MACHINE DATA FROM API FOR IDENTIFIER: ${identifier}`);
-      console.log("=".repeat(120));
+      // ── We have ≥ 4 digits — try all candidates ───────────────────────────
+      const candidates = buildCandidates(accumulated);
+      console.log(`   🔍 Trying ${candidates.length} candidate(s): [${candidates.slice(0,6).join(', ')}${candidates.length>6?'...':''}]`);
 
-      const customerData = await fetchCustomerFromExternal({ 
-        phone: /^\d{10}$/.test(identifier) ? identifier : null,
-        chassisNo: !/^\d{10}$/.test(identifier) ? identifier : null
-      });
+      let validResult = null;
+      let matchedCandidate = null;
+      for (const candidate of candidates) {
+        const r = await tryCandidate(candidate);
+        if (r) { validResult = r; matchedCandidate = candidate; break; }
+      }
 
-      if (!customerData) {
-        console.log("❌ Machine not found in API database");
-        twiml.say(
-          { voice: "Polly.Aditi", language: "hi-IN" },
-          "Hum aapka machine API mein nahi khoj paye. Aapko agent se connect kar rahe hain."
-        );
-        twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+      if (validResult) {
+        // ✅ FOUND
+        console.log(`   ✅ MATCHED on candidate: "${matchedCandidate}"`);
+        callData.chassis             = matchedCandidate;
+        callData.partialMachineNo    = "";
+        callData.machineNoFreshStart = false;
+        callData.customerData        = validResult.data;
+        callData.step                = "confirm_customer";
+        callData.retries             = 0;
+        const readable = matchedCandidate.split('').join(' ');
+        callData.lastQuestion = `Bahut shukriya! Machine number ${readable} humne dhoondh liya. Naam hai ${validResult.data.name}, aur city hai ${validResult.data.city}. Kya yeh aapki hi machine hai? Haan ya nahi boliye.`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // ── None of the candidates matched ────────────────────────────────────
+      callData.retries = (callData.retries || 0) + 1;
+      console.log(`   ❌ No match in ${candidates.length} candidates — Retry ${callData.retries}/4`);
+
+      if (callData.retries >= 4) {
+        twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Machine ka record nahi mila. Agent se connect kar rahe hain.");
+        twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
         activeCalls.delete(CallSid);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      console.log("✅ Machine found in API!");
-      console.log(`📍 City: ${customerData.city}`);
-      console.log(`👤 Name: ${customerData.name}`);
-      console.log("=".repeat(120) + "\n");
+      // Reset buffer; next turn will start fresh (flag set here, cleared at top of next turn)
+      const triedDisplay = candidates[0] ? candidates[0].split('').join(' ') : accumulated.split('').join(' ');
+      callData.partialMachineNo    = "";
+      callData.machineNoFreshStart = true;   // ← key flag: don't blend next turn's digits with old buffer
 
-      // ===== CONFIRM CUSTOMER CITY AND NAME =====
-      callData.chassis = identifier;
-      callData.customerData = customerData;
-      callData.isRegistered = false;
-      callData.step = "confirm_customer_details";
-      callData.retries = 0;
-      
-      const confirmQuestion = `आपका city है  ${customerData.city} और नाम है ${customerData.name}.क्या ये ठीक है? हाँ तो 1 दबाएं, नहीं तो 2 दबाएं।`;
-      callData.lastQuestion = confirmQuestion;
-      
-      console.log(`🔊 Asking for confirmation: "${confirmQuestion}"`);
-      askDTMF(twiml, confirmQuestion, 1);
+      const retryMessages = [
+        `${triedDisplay} — yeh number humhare record mein nahi hai ji. Machine par jo number likha hai, woh dobara ek ek digit karke boliye. Koi jaldi nahi.`,
+        `Abhi bhi match nahi hua ji. Apne kagaz ya bill mein dekh kar poora number ek saath boliye. Jaise: teen, teen, shunya, paanch, chaar, saat.`,
+        `Ek baar aur try karte hain. Number bahut dhire aur clearly boliye, bich mein ruk sakte hain, main sun raha hoon.`
+      ];
+      callData.lastQuestion = retryMessages[Math.min(callData.retries - 1, 2)];
+      askNumber(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== CONFIRM CUSTOMER DETAILS =====
-    if (callData.step === "confirm_customer_details") {
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating confirmation question");
-        askDTMF(twiml, callData.lastQuestion || "क्या सभी जानकारी सही है? एक दबाइए सही है तो, दो दबाइए गलत है तो।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
+    /* ──────────────────────────────────────────────────────
+       STEP 2: CONFIRM CUSTOMER
+       Bug fix: "आप मेरी मशीन है?" is a QUESTION (unclear), not negative.
+       Only go back to machine number on clear "nahi". Ambiguous → re-ask once,
+       then proceed to ask_city after 2 retries (don't loop forever).
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "confirm_customer") {
+      const name    = callData.customerData?.name || "";
+      const city    = callData.customerData?.city || "";
 
-      if (Digits === "1") {
-        // Customer confirmed - Continue
-        console.log("✅ Customer confirmed details - Moving to next step");
-        callData.step = "ask_caller_name";
+      if (isAffirmative(rawSpeech)) {
+        callData.step    = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = "बहुत अच्छा! अब मुझे बताइए, आपका पूरा नाम क्या है?";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else if (Digits === "2") {
-        // Customer denied - Restart
-        console.log("❌ Customer rejected details - Restarting identifier collection");
-        callData.step = "ask_identifier";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है। दोबारा: मशीन नंबर बोलिए या दर्ज करें, फिर हैश (#) key दबाइए।";
-        const gather = twiml.gather({
-          input: "dtmf speech",
-          hints: "machine number, chassis, मशीन नंबर, चेसिस",
-          finishOnKey: "#",
-          timeout: 30,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
-          console.log("❌ Invalid confirmation after retries - Escalating");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Samajh nahi paye. Aapko agent se connect kar rahe hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-        askDTMF(twiml, "Kripya 1 ya 2 dabayien.", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK CHASSIS (FOR REGISTERED CUSTOMERS) =====
-    if (callData.step === "ask_chassis") {
-      const chassis = extractChassisNumberV2(rawSpeech);
-      console.log(`✓ Chassis: ${chassis || "N/A"}`);
-
-      if (!chassis || !isValidChassis(chassis)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log(`❌ Invalid chassis after ${callData.retries} attempts - Escalating`);
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "हम आपका चेसिस नंबर समझ नहीं पाए। आपको एजेंट से जोड़ा जा रहा है।"
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        const hints = callData.retries === 1
-          ? "कोई बात नहीं। चेसिस नंबर एक-एक अंक के साथ धीरे-धीरे बोलिए। जैसे: तीन, तीन, शून्य, पाँच, चार, चार, सात।"
-          : "अपनी मशीन के दस्तावेज़ में देखकर चेसिस नंबर बोलिए। एक-एक नंबर साफ बोलिए।";
-
-        callData.lastQuestion = hints;
-        ask(twiml, hints);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const customerData = await fetchCustomerFromExternal({ chassisNo: chassis });
-
-      if (!customerData) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ Customer not found - Escalating");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Machine ka record nahi mila. Aapko agent se connect kar rahe hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "रिकॉर्ड नहीं मिला। फिर से चेसिस नंबर बोलिए।";
+        callData.lastQuestion = `Bahut achha ${name} ji! Aapki machine kaunse city mein khadi hai abhi? `;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      console.log(`✅ Customer found: ${customerData.name}`);
-      callData.chassis = chassis;
-      callData.customerData = customerData;
-      callData.isRegistered = true;
-      callData.step = "ask_caller_name";
-      callData.retries = 0;
-      callData.lastQuestion = "ठीक है! मशीन का रिकॉर्ड मिल गया। अब अपना पूरा नाम बताइए, कृपया।";
+      if (isNegative(rawSpeech)) {
+        callData.step             = "ask_machine_no";
+        callData.retries          = 0;
+        callData.partialMachineNo = "";
+        callData.machineNoFreshStart = true;
+        callData.lastQuestion     = "Koi baat nahi ji. Machine ka sahi number dobara boliye — ek ek digit clearly boliye.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Ambiguous (e.g. "आप मेरी मशीन है?" — question-form, not yes/no)
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 2) {
+        // Assume correct and move on — don't keep customer waiting
+        callData.step    = "ask_city";
+        callData.retries = 0;
+        callData.lastQuestion = `Theek hai ji. Aapki machine abhi kis shehar mein hai?`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      callData.lastQuestion = `[Name] ji, kya yeh aapki apni machine hai? Haan boliye agar sahi hai, nahi boliye agar galat hai.`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK CALLER NAME =====
-    if (callData.step === "ask_caller_name") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating caller name question");
-        ask(twiml, callData.lastQuestion || "अपका पूरा नाम बताइए।");
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
+    /* ──────────────────────────────────────────────────────
+       STEP 3: ASK CITY (machine location city)
+       Now also tries fuzzy matching against SERVICE_CENTERS.
+       If match found → auto-populate location data and skip to phone.
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ask_city") {
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
-
         if (callData.retries >= 3) {
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Naam samajh nahi aaya. Aapko ek agent se connect kar dete hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
+          callData.city    = callData.customerData?.city || "NA";
+          callData.step    = "ask_engineer_location";
+          callData.retries = 0;
+          callData.lastQuestion = "Theek hai ji. Ab yeh batayein ki engineer kahan aaye? Koi shehar, workshop, ya jagah ka naam boliye.";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-
-        console.log(`⚠️ Invalid name input - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "नाम स्पष्ट नहीं सुना। अपना पूरा नाम दोबारा बोलिए, जरा धीरे-धीरे।";
-        ask(twiml, callData.lastQuestion);
+        ask(twiml, "Shehar ka naam boliye ji. Jaise Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya Bhilwara — kaunse shehar mein machine hai?");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      const name = extractNameV2(rawSpeech);
-      console.log(`✓ Caller Name Extracted: ${name || "N/A"}`);
-
-      if (!name || !isValidName(name)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Samajh nahi aa raha. Agent ko connect karte hain."
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Name validation failed - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "अपना पूरा नाम साफ-साफ बोलिए, धीरे-धीरे ";
-        ask(twiml, callData.lastQuestion);
+      // Try fuzzy matching against SERVICE_CENTERS
+      const matchedCenter = matchServiceCenter(rawSpeech);
+      
+      if (matchedCenter) {
+        // ✅ MATCHED — Auto-populate all location data from SERVICE_CENTERS
+        console.log(`   ✅ Service center matched at city step: ${matchedCenter.city_name}`);
+        callData.city            = matchedCenter.city_name;
+        callData.engineerAddress = matchedCenter.city_add;
+        callData.branch          = matchedCenter.branch_name;
+        callData.outlet          = matchedCenter.city_name;
+        callData.city_id         = matchedCenter.branch_code;
+        callData.lat             = matchedCenter.lat;
+        callData.lng             = matchedCenter.lng;
+        callData.sc_id           = matchedCenter.id;
+        callData.jobLocation     = "Workshop";
+        callData.retries         = 0;
+        
+        console.log(`   📍 AUTO-POPULATED: Branch=${callData.branch}, Outlet=${callData.outlet}, City=${callData.city}`);
+        
+        // Skip ask_engineer_location and go directly to phone
+        callData.step         = "ask_phone";
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      callData.callerName = name;
+      // ❌ NO MATCH — Just store city and ask for engineer location
+      callData.city    = rawSpeech.trim();
+      callData.step    = "ask_engineer_location";
       callData.retries = 0;
-      callData.step = "ask_caller_phone";
-      callData.lastQuestion = " शुक्रिया! अब अपना 10-digit mobile number बोलिए या type करें, फिर # key दबाएं। जैसे: नौ आठ आठ दो तीन चार...";
-      const gather = twiml.gather({
-        input: "speech dtmf",
-        language: "hi-IN",
-        speechTimeout: "auto",
-        timeout: 15,
-        finishOnKey: "#",
-        numDigits: 10,
-        actionOnEmptyResult: true,
-        action: "/voice/process",
-        method: "POST",
-      });
-      gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
+      callData.lastQuestion = `Shukriya! Ab engineer base ke liye address batayein. ` +
+        `Workshop, Jaipur, Kota—kaunsi jaga par machine hai?`;
+      ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK CALLER PHONE =====
-    if (callData.step === "ask_caller_phone") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating phone entry question");
-        const gather = twiml.gather({
-          input: "speech dtmf",
-          language: "hi-IN",
-          speechTimeout: "auto",
-          timeout: 15,
-          finishOnKey: "#",
-          numDigits: 10,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, "अपना 10-digit mobile number बोलिए या type करें, फिर # key दबाएं। जैसे: नौ आठ आठ दो तीन चार...");
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
+    /* ──────────────────────────────────────────────────────
+       STEP 4: ASK ENGINEER BASE / ADDRESS
+       Fuzzy match against SERVICE_CENTERS database.
+       Auto-populate: branch, outlet, city_id, lat, lng, address
+       No confirmation — match is final.
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ask_engineer_location") {
+      // Only reject pure silence/noise
+      const isEmpty = !rawSpeech || rawSpeech.trim().length < 3;
+      const isPureNoise = isEmpty || isUncertain(rawSpeech) ||
+        pauseKeywords.some(k => rawSpeech.toLowerCase().includes(k));
 
-      // Extract phone from either speech or DTMF
-      let phoneInput = null;
-      
-      // First try DTMF digits
-      if (Digits && Digits.trim().length > 0) {
-        phoneInput = Digits.replace(/[^0-9]/g, ''); // Clean to digits only
-        console.log(`📱 DTMF Phone Input: "${phoneInput}" (Length: ${phoneInput.length})`);
-      }
-      
-      // Fallback to speech extraction
-      if (!phoneInput || phoneInput.length < 10) {
-        if (rawSpeech && rawSpeech.length > 0) {
-          const extracted = extractPhoneNumberV2(rawSpeech);
-          if (extracted && isValidPhone(extracted)) {
-            phoneInput = extracted;
-            console.log(`📱 Speech Phone Extracted: "${phoneInput}"`);
-          }
-        }
-      }
-
-      if (phoneInput && isValidPhone(phoneInput) && phoneInput.length === 10) {
-        // Valid phone number entered
-        callData.callerPhone = phoneInput;
-        callData.step = "confirm_phone";
-        callData.retries = 0;
-        const spokenDigits = phoneToSpokenDigits(phoneInput);
-        callData.lastQuestion = `आपका फोन नंबर: ${spokenDigits}। क्या यह नंबर सही है? एक दबाइए हाँ तो, दो दबाइए नहीं तो।`;
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        // Invalid or incomplete phone
+      if (isPureNoise) {
         callData.retries = (callData.retries || 0) + 1;
-
-        if (phoneInput) {
-          console.log(`⚠️ Invalid phone format "${phoneInput}" (${phoneInput.length} digits) - Retry ${callData.retries}/4`);
-        } else {
-          console.log(`⚠️ No phone input - Retry ${callData.retries}/4`);
-        }
-
-        if (callData.retries >= 4) {
-          console.log("❌ Invalid phone after 4 retries - Transferring to agent");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "हम आपका फोन नंबर समझ नहीं पाए। आपको एजेंट से जोड़ा जा रहा है।"
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
-          activeCalls.delete(CallSid);
+        if (callData.retries >= 3) {
+          // Give up — use city as fallback
+          callData.engineerAddress = callData.city || "Not Provided";
+          callData.jobLocation     = "Onsite";
+          callData.branch          = "NA";
+          callData.outlet          = "NA";
+          callData.city_id         = "NA";
+          callData.lat             = 0;
+          callData.lng             = 0;
+          callData.sc_id           = null;
+          callData.step            = "ask_phone";
+          callData.retries         = 0;
+          callData.lastQuestion    = _buildPhoneQuestion(callData);
+          askNumber(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-
-        callData.lastQuestion = `दोबारा प्रयास ${callData.retries}/4: अपना 10 अंकों का मोबाइल नंबर बोलिए। जैसे: नौ आठ आठ दो तीन चार...`;
-        const gather = twiml.gather({
-          input: "speech dtmf",
-          language: "hi-IN",
-          speechTimeout: "auto",
-          timeout: 15,
-          finishOnKey: "#",
-          numDigits: 10,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
+        ask(twiml, "Bhai sahab, machine abhi kahan rakhhi hai? Shehar ka naam, workshop, khet, ya koi bhi jagah boliye. Jaise Jaipur workshop, Tonk gaon, Kota bypass — kuch bhi.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
+
+      // Fuzzy match against SERVICE_CENTERS
+      const matchedCenter = matchServiceCenter(rawSpeech);
+      
+      if (matchedCenter) {
+        // ✅ MATCHED — Auto-populate all location data
+        console.log(`   ✅ Service center matched: ${matchedCenter.city_name}`);
+        callData.engineerAddress = matchedCenter.city_add;
+        callData.branch          = matchedCenter.branch_name;
+        callData.outlet          = matchedCenter.city_name;
+        callData.city_id         = matchedCenter.branch_code;
+        callData.lat             = matchedCenter.lat;
+        callData.lng             = matchedCenter.lng;
+        callData.sc_id           = matchedCenter.id;
+        callData.jobLocation     = detectJobLocation(rawSpeech) || "Workshop";
+        callData.retries         = 0;
+        
+        console.log(`   📍 Populated: Branch=${callData.branch}, Outlet=${callData.outlet}, City_ID=${callData.city_id}`);
+        
+        // Move to next step – NO CONFIRMATION
+        callData.step         = "ask_phone";
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // ❌ NO MATCH — Use customer's custom input as address
+      console.log(`   ⚠️ No service center matched — accepting custom address`);
+      callData.engineerAddress = rawSpeech.trim();
+      callData.jobLocation     = detectJobLocation(rawSpeech) || "Onsite";
+      callData.branch          = "NA";
+      callData.outlet          = "NA";
+      callData.city_id         = "NA";
+      callData.lat             = 0;
+      callData.lng             = 0;
+      callData.sc_id           = null;
+      callData.retries         = 0;
+      
+      // Move to next step — NO CONFIRMATION
+      callData.step         = "ask_phone";
+      callData.lastQuestion = _buildPhoneQuestion(callData);
+      askNumber(twiml, callData.lastQuestion);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== CONFIRM PHONE =====
+    /* ──────────────────────────────────────────────────────
+       STEP 5: ASK / CONFIRM PHONE NUMBER
+       Smart handling:
+         • If API has a phone on file → read it back, ask confirm
+         • "save kar lo / haan / sahi hai" → accept existing number
+         • "nahi" on known phone → ask new number
+         • Digit accumulation with fresh-start after confirm-no
+         • If customer says "save" / "wahi" / "sahi" → treat as affirmative
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ask_phone") {
+      const knownPhone = callData.customerData?.phone || "";
+
+      // Detect "save/wahi/sahi/use this" intent — treat as confirming existing number
+      const isSaveIntent = /\b(save|sev|wahi|wahin|usi|same|sahi|theek|haan|use|rakh|rakho|yahi|isko)\b/i.test(rawSpeech) &&
+                           !/^\d/.test(rawSpeech.trim());
+
+      // If customer confirms existing number (affirmative OR save-intent)
+      if ((isAffirmative(rawSpeech) || isSaveIntent) && knownPhone && knownPhone !== "Unknown" && callData.partialPhoneNo === "") {
+        callData.callerPhone    = knownPhone;
+        callData.partialPhoneNo = "";
+        callData.step           = "ask_complaint";
+        callData.retries        = 0;
+        callData.lastQuestion   = "Bahut achha ji! Ab mujhe batayein — machine mein kya taklif ho rahi hai? Engine, hydraulic, brake, gear, AC — jo bhi dikkat hai, detail mein batayein. Main dhyan se sun raha hoon.";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Customer rejects known phone with no digits — collect new number
+      if (isNegative(rawSpeech) && callData.partialPhoneNo === "" && knownPhone && knownPhone !== "Unknown") {
+        callData.partialPhoneNo = "";
+        callData.lastQuestion   = "Theek hai ji. Apna sahi phone number boliye. Ek ek digit karke boliye, jaldi nahi hai.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Extract phone digits (noise-filtered)
+      const phoneDigits = extractPhoneDigits(rawSpeech);
+      console.log(`   📱 Extracted phone digits: "${phoneDigits}" | Buffer: "${callData.partialPhoneNo}"`);
+
+      callData.partialPhoneNo = (callData.partialPhoneNo || "") + phoneDigits;
+      const accumulated = callData.partialPhoneNo;
+      console.log(`   ➕ Total phone: "${accumulated}" (${accumulated.length} digits)`);
+
+      if (accumulated.length >= 10) {
+        const phone = accumulated.slice(0, 10);
+        callData.callerPhone    = phone;
+        callData.partialPhoneNo = "";
+        callData.step           = "confirm_phone";
+        callData.retries        = 0;
+        const readable = phone.split('').join(' ');
+        callData.lastQuestion   = `Aapka phone number hai: ${readable}. Kya yeh bilkul sahi hai? Haan ya nahi boliye.`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (accumulated.length > 0 && accumulated.length < 10) {
+        const readable = accumulated.split('').join(' ');
+        callData.lastQuestion = `${readable} — aaya ji. Ab baaki ke number bhi boliye.`;
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // No usable digits
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 4) {
+        callData.callerPhone    = knownPhone || "Unknown";
+        callData.partialPhoneNo = "";
+        callData.step           = "ask_complaint";
+        callData.retries        = 0;
+        callData.lastQuestion   = "Koi baat nahi ji. Ab machine ki taklif batayein — kya problem hai?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      callData.lastQuestion = knownPhone && knownPhone !== "Unknown"
+        ? `Ji, humhare paas aapka number ${knownPhone.split('').join(' ')} hai. Kya yeh sahi hai? Haan ya nahi boliye.`
+        : "Bhai sahab, apna mobile number boliye. Ek ek digit karke.";
+      askNumber(twiml, callData.lastQuestion);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    /* ──────────────────────────────────────────────────────
+       STEP 5b: CONFIRM PHONE
+    ────────────────────────────────────────────────────── */
     if (callData.step === "confirm_phone") {
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating phone confirmation question");
-        askDTMF(twiml, callData.lastQuestion || "Press 1 for Yes, 2 for No.", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "1") {
-        console.log(`✓ Phone confirmed: ${callData.callerPhone}`);
-        callData.step = "ask_machine_type_numeric";
+      if (isAffirmative(rawSpeech)) {
+        callData.step    = "ask_complaint";
         callData.retries = 0;
-        callData.lastQuestion = "धन्यवाद! अब अपनी मशीन की सेवा योजना बताइए। एक दबाइए Warranty के लिए, दो दबाइए JCB Care के लिए, तीन दबाइए Engine Care के लिए, चार दबाइए Demo के लिए, पाँज दबाइए BHL के लिए।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "2") {
-        console.log(`❌ Phone not confirmed - Re-asking`);
-        callData.step = "ask_caller_phone";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है। दोबारा: 10 अंकों का मोबाइल नंबर बोलिए या type करें, फिर हैश (#) key दबाइए।";
-        const gather = twiml.gather({
-          input: "speech dtmf",
-          language: "hi-IN",
-          speechTimeout: "auto",
-          timeout: 15,
-          finishOnKey: "#",
-          numDigits: 10,
-          actionOnEmptyResult: true,
-          action: "/voice/process",
-          method: "POST",
-        });
-        gather.say({ voice: "Polly.Aditi", language: "hi-IN" }, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      // If user speaks unexpected input or no digit pressed, repeat question
-      if (!Digits || Digits.trim().length === 0) {
-        callData.retries = (callData.retries || 0) + 1;
-        console.log(`⚠️ No/invalid digit pressed - Retry ${callData.retries}/3 for phone confirmation`);
-
-        if (callData.retries >= 3) {
-          callData.step = "ask_machine_type_numeric";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है। अब मशीन की सेवा योजना चुनिए। एक दबाइए Warranty के लिए, दो दबाइए JCB Care के लिए, तीन दबाइए Engine Care के लिए, चार दबाइए Demo के लिए, पाँच दबाइए BHL के लिए।";
-          askDTMF(twiml, callData.lastQuestion, 1);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log("⚠️ Repeating: Press 1 for Yes, 2 for No");
-        askDTMF(twiml, "एक दबाइए हाँ के लिए, दो दबाइए नहीं के लिए।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        // Invalid digit pressed (not 1, 2, or empty)
-        callData.retries = (callData.retries || 0) + 1;
-        console.log(`⚠️ Invalid digit '${Digits}' pressed - Retry ${callData.retries}/3 for phone confirmation`);
-
-        if (callData.retries >= 3) {
-          callData.step = "ask_machine_type_numeric";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है। अब मशीन की सेवा योजना चुनिए। एक दबाइए Warranty के लिए, दो दबाइए JCB Care के लिए, तीन दबाइए Engine Care के लिए, चार दबाइए Demo के लिए, पाँच दबाइए BHL के लिए।";
-          askDTMF(twiml, callData.lastQuestion, 1);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log("⚠️ Asking to confirm phone again");
-        askDTMF(twiml, "कृपया एक दबाइए सही है तो, दो दबाइए गलत है तो।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK MACHINE TYPE - NUMERIC IVR =====
-    if (callData.step === "ask_machine_type_numeric") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating machine type question");
-        askDTMF(twiml, callData.lastQuestion || "Press 1 for Warranty, 2 for JCB Care, 3 for Engine Care, 4 for Demo, 5 for BHL.", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const machineType = getMachineTypeByNumber(Digits);
-
-      if (Digits && ['1', '2', '3', '4', '5'].includes(Digits)) {
-        console.log(`✓ Machine Type Selected: ${machineType} (Digit: ${Digits})`);
-        callData.machineType = machineType;
-        // SKIP CONFIRMATION - DIRECTLY GO TO MACHINE STATUS
-        callData.step = "ask_machine_status_numeric";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है। अब बताइए - आपकी मशीन की स्थिति क्या है? 1 दबाइए अगर बिल्कुल बंद है, या 2 दबाइए अगर चल रही है पर समस्या आ रही है।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ Invalid machine type - Using default");
-          callData.machineType = "Warranty";
-          callData.step = "ask_machine_status_numeric";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है। अब मशीन की स्थिति - बंद है या चल रही है? एक दबाइए या दो दबाइए।";
-          askDTMF(twiml, callData.lastQuestion, 1);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "गलत इनपुट। कृपया 1 से 5 के बीच नंबर दबाइए।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK MACHINE STATUS - NUMERIC IVR =====
-    if (callData.step === "ask_machine_status_numeric") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating machine status question");
-        askDTMF(twiml, callData.lastQuestion || "एक या दो दबाईए।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const status = getMachineStatusByNumber(Digits);
-
-      if (Digits && ['1', '2'].includes(Digits)) {
-        console.log(`✓ Machine Status Selected: ${status} (Digit: ${Digits})`);
-        callData.machineStatus = status;
-        // SKIP CONFIRMATION - DIRECTLY GO TO LOCATION
-        callData.step = "ask_machine_location_numeric";
-        callData.retries = 0;
-        callData.lastQuestion = "अच्छा। अब बताइए आपकी मशीन कहाँ है? 1 दबाइए अगर साइट पर है, 2 दबाइए अगर कार्यशाला में है।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ Invalid machine status - Using default");
-          callData.machineStatus = "Running With Problem";
-          callData.step = "ask_machine_location_numeric";
-          callData.retries = 0;
-          callData.lastQuestion = "मशीन कहाँ है? 1 दबाइए साइट के लिए, 2 दबाइए कार्यशाला के लिए।";
-          askDTMF(twiml, callData.lastQuestion, 1);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "गलत इनपुट। 1 दबाइए अगर बंद है, 2 दबाइए अगर समस्या के साथ चल रही है।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK MACHINE LOCATION - NUMERIC IVR =====
-    if (callData.step === "ask_machine_location_numeric") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating machine location question");
-        askDTMF(twiml, "स्थान: एक दबाइए साइट के लिए, दो दबाइए वर्कशॉप के लिए।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits && ['1', '2'].includes(Digits)) {
-        const locationNames = {
-          '1': 'Site',
-          '2': 'Workshop'
-        };
-        callData.jobLocation = locationNames[Digits];
-        console.log(`✓ Machine Location Selected: ${callData.jobLocation}`);
-        
-        callData.step = "ask_address";
-        callData.retries = 0;
-        callData.lastQuestion = "बिल्कुल ठीक है। अब मशीन का पूरा पता बताइए - शहर का नाम, इलाका, और पास में कोई दुकान या निशानी।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ Invalid location - Using default");
-          callData.jobLocation = "Site";
-          callData.step = "ask_complaint";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है। अब समस्या बताइए - मशीन में क्या समस्या आ रही है?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "गलत इनपुट। 1 दबाइए साइट के लिए, 2 दबाइए कार्यशाला के लिए।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK ADDRESS =====
-
-    // ===== ASK ADDRESS =====
-    if (callData.step === "ask_address") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating address question");
-        callData.lastQuestion = "मशीन का पता दोबारा बोलिए। शहर और इलाके का नाम जरूरी है।";
+        callData.lastQuestion = "Bahut achha ji! Ab mujhe batayein — machine mein kya taklif ho rahi hai? Engine, hydraulic, brake, gear, AC — jo bhi dikkat hai, detail mein batayein. Main dhyan se sun raha hoon.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-
-      if (rejectInvalid(rawSpeech)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.address = "Not Provided";
-          callData.step = "ask_pincode";
-          callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Ab apna 6 digit pincode batayein.";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Invalid address input - Retry ${callData.retries}/3`);
+      if (isNegative(rawSpeech)) {
+        callData.partialPhoneNo = "";
+        callData.step    = "ask_phone";
+        callData.retries = 0;
+        callData.lastQuestion   = "Theek hai ji. Koi baat nahi. Apna sahi number dobara boliye, main likh leta hoon.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 3) {
+        callData.step    = "ask_complaint";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai ji. Ab batayein — machine mein kya problem hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-
-      const address = extractLocationAddressV2(rawSpeech);
-      console.log(`✓ Address: ${address || "N/A"}`);
-
-      if (!address || !isValidAddress(address)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.address = "Not Provided";
-          callData.step = "ask_pincode";
-          callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Ab apna 6 digit pincode batayein.";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Invalid address format - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "पता स्पष्ट नहीं सुना। शहर और इलाके का नाम दोबारा बोलिए, साफ-साफ।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      callData.address = address;
-      callData.step = "ask_pincode";
-      callData.retries = 0;
-      callData.lastQuestion = "बहुत अच्छा! अब अपना 6 अंकों का पिनकोड बताइए।";
-      ask(twiml, callData.lastQuestion);
+      ask(twiml, "Bhai sahab, bas haan ya nahi boliye — number sahi hai ki nahi?");
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK PINCODE =====
-    if (callData.step === "ask_pincode") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating pincode question");
-        callData.lastQuestion = "पिनकोड बोलिए ना, जरा साफ करके। 6 अंक।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (rejectInvalid(rawSpeech)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.pincode = "000000";
-          callData.step = "ask_complaint";
-          callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Ab machine mein kya problem hai?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Invalid pincode input - Retry ${callData.retries}/3`);
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const pincode = extractPincodeV2(rawSpeech);
-
-      if (!pincode || !isValidPincode(pincode)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.pincode = "000000";
-          callData.step = "ask_complaint";
-          callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Ab machine mein kya problem hai?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        console.log(`⚠️ Invalid pincode format - Retry ${callData.retries}/3`);
-        callData.lastQuestion = "कृपया अपना सही 6 अंकों का पिनकोड बोलिए।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      callData.pincode = pincode;
-      callData.retries = 0;
-      callData.step = "ask_complaint";
-      callData.lastQuestion = "बिल्कुल ठीक है। अब मुझे बताइए, मशीन में क्या समस्या है?";
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
-    // ===== ASK COMPLAINT =====
+    /* ──────────────────────────────────────────────────────
+       STEP 6: ASK COMPLAINT
+       • Detects ALL complaints mentioned (not just top one)
+       • Accumulates across multiple turns if customer adds more
+       • Stores array: callData.allComplaints = [{complaint, subTitle, score}]
+       • Also appends if customer says "aur bhi" on re-ask
+    ────────────────────────────────────────────────────── */
     if (callData.step === "ask_complaint") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating complaint question");
-        callData.lastQuestion = "मशीन या उपकरण में क्या समस्या है? पूरा विवरण बताइए ना। जैसे: इंजन नहीं चला रहा, एसी ठंडा नहीं कर रहा, हाइड्रोलिक दबाव कम है, आदि।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ No complaint info after 2 retries - Transferring to agent");
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "समझ नहीं आ रहा। आपको एक एजेंट से जोड़ दिया जा रहा है।"
-          );
-          twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+        if (callData.retries >= 5) {
+          twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Bhai sahab, aawaz thodi saaf nahi aayi. Koi baat nahi, hum aapko hamare sahayak se jod dete hain. Woh aapki poori madad karenge.");
+          twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
           activeCalls.delete(CallSid);
           return res.type("text/xml").send(twiml.toString());
         }
-
-        console.log(`⚠️ Invalid complaint input - Retry ${callData.retries}/2`);
-        ask(twiml, callData.lastQuestion);
+        const nudges = [
+          "Shukriya ji! Ab mujhe batayein ki machine mein kya taklif ho rahi hai. Sab problems ek saath bata sakte hain — engine, hydraulic, brake, gear, AC — jo bhi pareshani hai, khulke boliye.",
+          "Bhai sahab, machine mein kya taklif hai? Engine, brake, hydraulic, gear — jo bhi dikkat hai, batayein.",
+          "Thodi aur jaankari dijiye — machine kya kar rahi hai ya kya nahi kar rahi? Khulke boliye.",
+          "Koi awaaz aa rahi hai? Machine chalu nahi ho rahi? Ya koi aur problem hai? Bata dijiye."
+        ];
+        ask(twiml, nudges[Math.min(callData.retries - 1, nudges.length - 1)]);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      callData.rawComplaint = rawSpeech;
-      const detected = detectComplaint(rawSpeech);
-      console.log(`🔍 Complaint detection result: ${detected.complaint} (Score: ${detected.score})`);
+      // Save / append raw complaint text
+      callData.rawComplaint  = (callData.rawComplaint ? callData.rawComplaint + " | " : "") + rawSpeech;
+      callData.machineStatus = detectMachineStatus(callData.rawComplaint);
+      callData.machineType   = detectMachineType(callData.rawComplaint);
 
-      // If no clear match or low score
-      if (!detected || detected.score < 3) {
-        console.log(`⚠️ No clear complaint match - Asking clarifying questions`);
-        callData.step = "ask_complaint_clarify";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है, थोड़ा और विवरण से बताइए। कब से यह समस्या है? मशीन की शुरुआत में थी या बाद में? या कोई विद्युत समस्या है?";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
+      // Capture job location if mentioned
+      const locInComplaint = detectJobLocation(rawSpeech);
+      if (locInComplaint && !callData.jobLocation) callData.jobLocation = locInComplaint;
 
-      console.log(`✓ Complaint detected: ${detected.complaint} (Score: ${detected.score})`);
-      callData.complaintTitle = detected.complaint;
-      
-      // Ask for confirmation before proceeding
-      callData.step = "confirm_complaint_title";
-      callData.retries = 0;
-      callData.lastQuestion = `ठीक है, समझ गया। तो आपकी समस्या की श्रेणी है: ${detected.complaint}। क्या यह ठीक है? अगर सही है तो एक दबाइए, अगर गलत है तो दो दबाइए।`;
-      askDTMF(twiml, callData.lastQuestion, 1);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
+      // Detect ALL complaints in cumulative text
+      const allDetected = detectAllComplaints(callData.rawComplaint);
+      console.log(`   📋 Total complaints so far: ${allDetected.length}`);
 
-    // ===== CONFIRM COMPLAINT TITLE =====
-    if (callData.step === "confirm_complaint_title") {
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating confirmation question");
-        callData.lastQuestion = "समस्या की श्रेणी सही है ना? 1 दबाइए हाँ तो, 2 दबाइए नहीं तो।";
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (Digits === "1") {
-        console.log(`✓ User confirmed complaint title: ${callData.complaintTitle}`);
-        
-        // Check if this category has sub-complaints
-        const hasSubComplaints = complaintMap[callData.complaintTitle]?.subTitles &&
-                                Object.keys(complaintMap[callData.complaintTitle].subTitles).length > 1;
-
-        if (hasSubComplaints) {
-          // Move to sub-complaint selection
-          callData.step = "ask_sub_complaint";
-          callData.retries = 0;
-          const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
-          callData.lastQuestion = subQuestion;
-          ask(twiml, subQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        } else {
-          // No sub-complaints, go directly to service date
-          callData.complaintSubTitle = "General";
-          callData.step = "ask_service_date";
-          callData.retries = 0;
-          callData.lastQuestion = "धन्यवाद! अब बताइए, इंजीनियर के लिए कौन सी तारीख ठीक है? तारीख बोलिए - जैसे: 15 फरवरी, 15/2, आज, कल, या परसों।";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-      } else if (Digits === "2") {
-        console.log(`❌ User rejected complaint title - Re-asking`);
-        callData.step = "ask_complaint";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है, दोबारा पूछता हूँ। मशीन या उपकरण में असली क्या समस्या है? पूरा विवरण बताइए।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
+      if (allDetected.length === 0) {
         callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
-          console.log("❌ Invalid confirmation after retries - Using detected complaint");
-          // Use the detected complaint as-is
-          const hasSubComplaints = complaintMap[callData.complaintTitle]?.subTitles &&
-                                  Object.keys(complaintMap[callData.complaintTitle].subTitles).length > 1;
-
-          if (hasSubComplaints) {
-            callData.step = "ask_sub_complaint";
-            callData.retries = 0;
-            const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
-            callData.lastQuestion = subQuestion;
-            ask(twiml, subQuestion);
-            activeCalls.set(CallSid, callData);
-            return res.type("text/xml").send(twiml.toString());
-          } else {
-            callData.complaintSubTitle = "General";
-            callData.step = "ask_service_date";
-            callData.retries = 0;
-            callData.lastQuestion = "चलो आगे बढ़ते हैं। इंजीनियर के लिए कौन सी तारीख ठीक है?";
-            ask(twiml, callData.lastQuestion);
-            activeCalls.set(CallSid, callData);
-            return res.type("text/xml").send(twiml.toString());
-          }
-        }
-        
-        askDTMF(twiml, "कृपया एक या दो दबाइए। एक अगर सही, दो अगर गलत।", 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
-
-    // ===== ASK COMPLAINT CLARIFICATION =====
-    if (callData.step === "ask_complaint_clarify") {
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating clarification question");
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (rejectInvalid(rawSpeech)) {
-        callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
-          // If still no clear complaint, use "Other"
-          console.log("❌ Complaint still unclear - Using 'Other' category");
-          callData.complaintTitle = "General Problem";
+        if (callData.retries >= 4) {
+          // Fallback: save as General
+          callData.allComplaints     = [{ complaint: "General Problem", subTitle: "Other", score: 0 }];
+          callData.complaintTitle    = "General Problem";
           callData.complaintSubTitle = "Other";
-          callData.step = "ask_service_date";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है बस। इंजीनियर को कब बुलाना है? आज, कल, या परसों?";
+          callData.step              = "final_confirmation";
+          callData.retries           = 0;
+          callData.lastQuestion      = _buildSummary(callData);
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        
-        console.log(`⚠️ Clarification unclear - Retry ${callData.retries}/2`);
+        callData.lastQuestion = "Zara aur detail mein batayein ji — machine ka kaunsa hissa theek nahi hai, ya kaunsi awaaz aa rahi hai? Main samajhna chahta hoon.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // Try to detect complaint again with clarification
-      const secondDetected = detectComplaint(rawSpeech);
-      
-      if (secondDetected && secondDetected.score >= 3) {
-        callData.complaintTitle = secondDetected.complaint;
-        console.log(`✓ Complaint detected from clarification: ${secondDetected.complaint}`);
-        callData.step = "confirm_complaint_title";
-        callData.retries = 0;
-        callData.lastQuestion = `ठीक है, तो आपकी मुख्य समस्या है: ${secondDetected.complaint}। सही है ना? एक दबाइए हाँ तो, दो दबाइए नहीं तो।`;
-        askDTMF(twiml, callData.lastQuestion, 1);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      } else {
-        // Still no clear match
-        console.log("❌ No clear complaint from clarification - Using 'Other'");
-        callData.complaintTitle = "General Problem";
-        callData.complaintSubTitle = "Other";
-        callData.step = "ask_service_date";
-        callData.retries = 0;
-        callData.lastQuestion = "ठीक है। अब इंजीनियर को कब बुलाना है?";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-    }
+      // Store all detected complaints
+      callData.allComplaints     = allDetected;
+      callData.complaintTitle    = allDetected[0].complaint;
+      callData.complaintSubTitle = allDetected[0].subTitle;
+      callData.retries           = 0;
+      callData.step              = "final_confirmation";
 
-    // ===== ASK SUB-COMPLAINT =====
-    if (callData.step === "ask_sub_complaint") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating sub-complaint question");
-        const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
-        callData.lastQuestion = subQuestion;
-        console.log(`📋 Asking about ${callData.complaintTitle} sub-types`);
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      if (rejectInvalid(rawSpeech)) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          console.log("❌ Sub-complaint not clear - Using Other");
-          callData.complaintSubTitle = "Other";
-          callData.step = "ask_service_date";
-          callData.retries = 0;
-          callData.lastQuestion = "Theek hai. Ab engineer ke liye kaun si tarikh theek hai?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        const subQuestion = getSubComplaintQuestion(callData.complaintTitle);
-        callData.lastQuestion = "स्पष्ट नहीं सुना। " + subQuestion;
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const subResult = detectSubComplaint(callData.complaintTitle, rawSpeech);
-      console.log(`✓ Sub-complaint: ${subResult.subTitle} (Confidence: ${subResult.confidence})`);
-
-      callData.complaintSubTitle = subResult.subTitle || "Other";
-      
-      // Move to service date
-      callData.step = "ask_service_date";
-      callData.retries = 0;
-      callData.lastQuestion = "ठीक है! अब बताइए, इंजीनियर के लिए कौन सी तारीख ठीक है? तारीख बोलिए - जैसे: 15 फरवरी, 15/2, आज, कल, या परसों।";
+      // Go directly to final confirmation and submit — skip re-confirmation
+      console.log(`   ✅ Detected ${allDetected.length} complaint(s) — proceeding to submit`);
+      callData.lastQuestion = _buildSummary(callData);
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK SERVICE DATE =====
-    if (callData.step === "ask_service_date") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating service date question");
-        callData.lastQuestion = "इंजीनियर के लिए कौन सी तारीख ठीक है? तारीख बताइए जैसे: 15 फरवरी या 15/2।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
+    /* ──────────────────────────────────────────────────────
+       STEP 7: FINAL CONFIRMATION (SKIPPED confirm_complaint)
+       Removed re-confirmation step. Customer's first answer is final.
+       Now just auto-processes and submits.
+    ────────────────────────────────────────────────────── */
 
-      const date = extractServiceDate(rawSpeech);
-
-      if (!date) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          callData.serviceDate = tomorrow;
-          callData.step = "ask_service_time_from";
-          callData.retries = 0;
-          callData.lastQuestion = "ठीक है, कल के लिए तय कर दिया। अब बताइए, इंजीनियर किस समय आ सकता है?";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "तारीख नहीं सुना। कृपया बोलिए: 13 फरवरी, 15/2";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      console.log(`✓ Service Date: ${date.toDateString()}`);
-      callData.serviceDate = date;
-      callData.step = "ask_service_time_from";
-      callData.lastQuestion = "बिल्कुल ठीक है। अब बताइए, इंजीनियर कितने बजे आ सकता है? सुबह, दोपहर या शाम, कोई भी समय बता दीजिए।";
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
+    /* ──────────────────────────────────────────────────────
+       STEP 8: AUTO-SUBMIT (No re-confirmation)
+       After detecting complaints, directly submit without asking Y/N
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "final_confirmation") {
+      // Any input triggers immediate submission — customer's first data is final
+      console.log(`   📤 Proceeding with auto-submit on input: "${rawSpeech}"`);
+      await _submitAndClose(twiml, callData, CallSid);
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // ===== ASK FROM TIME =====
-    if (callData.step === "ask_service_time_from") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating from time question");
-        callData.lastQuestion = "इंजीनियर कितने बजे से आ सकता है? शुरुआत का समय बोलिए ना।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const fromTime = extractTimeV2(rawSpeech);
-
-      if (!fromTime) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.fromTime = "9:00 AM";
-          callData.step = "ask_service_time_to";
-          callData.retries = 0;
-          callData.lastQuestion = "कितने बजे तक इंजीनियर काम कर सकता है? समाप्ति समय बोलिए। जैसे: 5 बजे, 7 बजे।";
-          ask(twiml, callData.lastQuestion);
-          activeCalls.set(CallSid, callData);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "समय स्पष्ट बोलिए। जैसे: सुबह नौ बजे, दोपहर दो बजे, शाम पाँच बजे।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      console.log(`✓ From Time: ${fromTime}`);
-      callData.fromTime = fromTime;
-      callData.step = "ask_service_time_to";
-      callData.lastQuestion = "बिल्कुल। अब बताइए, कितने बजे तक इंजीनियर वहाँ रह सकता है? समाप्ति समय बताइए।";
-      ask(twiml, callData.lastQuestion);
-      activeCalls.set(CallSid, callData);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
-    // ===== ASK TO TIME & SAVE =====
-    if (callData.step === "ask_service_time_to") {
-      // Handle STAR (*) key to repeat last question
-      if (Digits === "*") {
-        console.log("🔄 User pressed * - Repeating to time question");
-        callData.lastQuestion = "कितने बजे तक इंजीनियर काम कर सकता है? समाप्ति समय बताइए।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      const toTime = extractTimeV2(rawSpeech);
-
-      if (!toTime) {
-        callData.retries = (callData.retries || 0) + 1;
-
-        if (callData.retries >= 3) {
-          callData.toTime = "5:00 PM";
-
-          console.log("\n" + "=".repeat(120));
-          console.log("✅ ALL DATA COLLECTED - SAVING COMPLAINT");
-          console.log("=".repeat(120));
-          console.log(`🔧 Chassis: ${callData.chassis}`);
-          console.log(`📱 Caller: ${callData.callerName} (${callData.callerPhone})`);
-          console.log(`🏢 Machine Type: ${callData.machineType}`);
-          console.log(`🔴 Status: ${callData.machineStatus}`);
-          console.log(`📍 Location: ${callData.jobLocation}`);
-          console.log(`🏠 Address: ${callData.address}`);
-          console.log(`📮 Pincode: ${callData.pincode}`);
-          console.log(`🎯 Complaint: ${callData.complaintTitle} → ${callData.complaintSubTitle}`);
-          console.log(`📅 Service: ${callData.serviceDate?.toDateString()}`);
-          console.log(`⏰ Time: ${callData.fromTime} - ${callData.toTime}`);
-          console.log("=".repeat(120) + "\n");
-
-          if (callData.customerData) {
-            const result = await saveComplaint(twiml, callData);
-
-            if (result.success) {
-              twiml.say(
-                { voice: "Polly.Aditi", language: "hi-IN" },
-                `Bahut bahut dhanyavaad! Aapki complaint successfully register ho gayi hai${result.sapId ? '. Complaint number: ' + result.sapId : ''}. Hamara engineer jald hi aapse contact karega!`
-              );
-            } else {
-              twiml.say(
-                { voice: "Polly.Aditi", language: "hi-IN" },
-                "Dhanyavaad! Aapki complaint register ho gayi hai. Hamari team aapko contact karega!"
-              );
-            }
-          } else {
-            twiml.say(
-              { voice: "Polly.Aditi", language: "hi-IN" },
-              "Dhanyavaad! Aapki complaint register ho gayi hai. Hamari team aapko contact karega!"
-            );
-          }
-
-          twiml.hangup();
-          activeCalls.delete(CallSid);
-          return res.type("text/xml").send(twiml.toString());
-        }
-
-        callData.lastQuestion = "समाप्ति समय बताइए ना। जैसे: पाँच बजे, सात बजे।";
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      console.log(`✓ To Time: ${toTime}`);
-      callData.toTime = toTime;
-
-      console.log("\n" + "=".repeat(120));
-      console.log("✅ ALL DATA COLLECTED - SAVING COMPLAINT");
-      console.log("=".repeat(120));
-      console.log(`🔧 Chassis: ${callData.chassis}`);
-      console.log(`📱 Caller: ${callData.callerName} (${callData.callerPhone})`);
-      console.log(`🏢 Machine Type: ${callData.machineType}`);
-      console.log(`🔴 Status: ${callData.machineStatus}`);
-      console.log(`📍 Location: ${callData.jobLocation}`);
-      console.log(`🏠 Address: ${callData.address}`);
-      console.log(`📮 Pincode: ${callData.pincode}`);
-      console.log(`🎯 Complaint: ${callData.complaintTitle} → ${callData.complaintSubTitle}`);
-      console.log(`📅 Service: ${callData.serviceDate?.toDateString()}`);
-      console.log(`⏰ Time: ${callData.fromTime} - ${toTime}`);
-      console.log("=".repeat(120) + "\n");
-
-      if (callData.customerData) {
-        const result = await saveComplaint(twiml, callData);
-
-        if (result.success) {
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            `Bahut bahut dhanyavaad! Aapki complaint successfully register ho gayi hai${result.sapId ? '. Complaint number: ' + result.sapId : ''}. Hamara engineer jald hi aapse contact karega!`
-          );
-        } else {
-          twiml.say(
-            { voice: "Polly.Aditi", language: "hi-IN" },
-            "Dhanyavaad! Aapki complaint register ho gayi hai. Hamari team aapko contact karega!"
-          );
-        }
-      } else {
-        twiml.say(
-          { voice: "Polly.Aditi", language: "hi-IN" },
-          "Dhanyavaad! Aapki complaint register ho gayi hai. Hamari team aapko contact karega!"
-        );
-      }
-
-      twiml.hangup();
-      activeCalls.delete(CallSid);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
+    // Fallback
     activeCalls.set(CallSid, callData);
     res.type("text/xml").send(twiml.toString());
+
   } catch (error) {
-    console.error("❌ Call Processing Error:", error);
+    console.error("❌ FATAL Error:", error);
     const twiml = new VoiceResponse();
-    twiml.say(
-      { voice: "Polly.Aditi", language: "hi-IN" },
-      "Kshama karein, kuch technical problem hai. Kripya agent se baat karne ke liye do dabayein."
-    );
-    twiml.dial(process.env.HUMAN_AGENT_NUMBER);
+    twiml.say({ voice: "Polly.Aditi", language: "hi-IN" }, "Ji, thodi technical dikkat aa gayi. Koi baat nahi, hum aapko hamare sahayak se jod dete hain. Woh aapki madad zaroor karenge.");
+    twiml.dial(process.env.HUMAN_AGENT_NUMBER || "+919876543210");
     return res.type("text/xml").send(twiml.toString());
   }
 });
+
+/* ======================= HELPER: Build phone question ======================= */
+function _buildPhoneQuestion(callData) {
+  const knownPhone = callData.customerData?.phone;
+  if (knownPhone && knownPhone !== "Unknown") {
+    const readable = knownPhone.split('').join(' ');
+    return `Ji, humhare paas aapka ek number pehle se hai — ${readable}. Kya is number par hum aapse sampark kar sakte hain? Agar haan to haan boliye, agar koi aur number dena ho to woh boliye.`;
+  }
+  return "Bhai sahab, apna mobile number boliye jis par hum aapko sampark kar sakein. Ek ek digit karke boliye, koi jaldi nahi.";
+}
+
+/**
+ * _buildComplaintReadback — human-friendly natural readback of all complaints
+ * e.g. ["Engine", "Braking System"] → "Engine aur Braking System"
+ *      ["Engine", "Hydraulic System", "Noise"] → "Engine, Hydraulic System, aur Noise"
+ */
+function _buildComplaintReadback(complaints) {
+  if (!complaints || complaints.length === 0) return "General Problem";
+  
+  // Build list with sub-title context
+  const parts = complaints.map(c => {
+    if (c.subTitle && c.subTitle !== "Other") return `${c.complaint} (${c.subTitle})`;
+    return c.complaint;
+  });
+
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} aur ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, aur ${parts[parts.length - 1]}`;
+}
+
+/* ======================= HELPER: Build summary for final confirmation ======================= */
+function _buildSummary(callData) {
+  const name      = callData.customerData?.name || "Unknown";
+  const chassis   = callData.chassis            || "N/A";
+  const city      = callData.city               || callData.customerData?.city || "N/A";
+  const location  = callData.engineerAddress    || "Not provided";
+  const phone     = callData.callerPhone        || callData.customerData?.phone || "N/A";
+
+  // Multi-complaint readback
+  const complaints     = callData.allComplaints || [];
+  const complaintText  = _buildComplaintReadback(
+    complaints.length > 0 ? complaints : [{ complaint: callData.complaintTitle || "General Problem", subTitle: callData.complaintSubTitle || "Other" }]
+  );
+
+  const chassisReadable = (chassis !== "N/A") ? chassis.split('').join(' ') : chassis;
+  const phoneReadable   = (phone   !== "N/A") ? phone.split('').join(' ')   : phone;
+
+  return (
+    `Theek hai ji! Main aapki saari jaankari ek baar bata deta hoon. Naam: ${name}. Machine number: ${chassisReadable}. Shehar: ${city}. Engineer ki jagah: ${location}. Phone number: ${phoneReadable}. Taklif: ${complaintText}. Kya sab sahi hai? Haan boliye aur main aapki complaint abhi darz kar deta hoon.`
+  );
+}
+
+/* ======================= HELPER: Submit and close call ======================= */
+async function _submitAndClose(twiml, callData, CallSid) {
+  const allComplaints = callData.allComplaints || [];
+  const complaintsLog = allComplaints.length > 0
+    ? allComplaints.map(c => `${c.complaint} (${c.subTitle})`).join(' | ')
+    : `${callData.complaintTitle} — ${callData.complaintSubTitle}`;
+
+  console.log("\n" + "=".repeat(70));
+  console.log("📤 SUBMITTING COMPLAINT");
+  console.log("=".repeat(70));
+  console.log(`  Chassis:    ${callData.chassis}`);
+  console.log(`  Customer:   ${callData.customerData?.name}`);
+  console.log(`  Phone:      ${callData.callerPhone}`);
+  console.log(`  City:       ${callData.city}`);
+  console.log(`  Address:    ${callData.engineerAddress}`);
+  console.log(`  Complaints: ${complaintsLog}`);
+  console.log(`  Count:      ${allComplaints.length} problem(s)`);
+  console.log(`  Status:     ${callData.machineStatus}`);
+  console.log("=".repeat(70) + "\n");
+
+  const result = await saveComplaint(callData);
+
+  if (result.success && result.sapId) {
+    twiml.say(
+      { voice: "Polly.Aditi", language: "hi-IN" },
+      `Bahut shukriya ji! Aapki complaint hamare system mein darz ho gayi hai. Aapka complaint number hai: ${result.sapId.toString().split('').join(' ')}. Yeh number sambhal kar rakhe, kaam aayega. Hamare engineer jald hi aapko call karenge aur ghar aakar machine theek kar denge. Rajesh Motors mein call karne ka shukriya. Aapka din shubh rahe. Namaskar!`
+    );
+  } else {
+    twiml.say(
+      { voice: "Polly.Aditi", language: "hi-IN" },
+      `Bahut shukriya ji! Aapki complaint humne darz kar li hai. Hamari team jald hi aapko call karegi aur aapki machine theek karegi. Rajesh Motors mein call karne ka shukriya. Aapka din shubh rahe. Namaskar!`
+    );
+  }
+
+  twiml.hangup();
+  activeCalls.delete(CallSid);
+}
 
 export default router;
