@@ -959,6 +959,54 @@ const pauseKeywords = [
   "ठहरिये",
 ];
 
+/* ─── BUG 1: COMMAND/VERB WORDS THAT SHOULD NOT BE ACCEPTED AS CITY ──── */
+const verbCommandWords = new Set([
+  "बोलो", "बोले", "बोला", "बोलिए", "बोल",
+  "बताओ", "बता", "बताइए", "बताइये",
+  "कहो", "कहिए", "कहिये",
+  "सुनो", "सुनिए", "सुनिये", "सुन",
+  "सुन रहे हो", "आप बोलो", "हां बोलो", "नहीं बोलो",
+  "bol", "batao", "bata", "kaho", "suno", "kho",
+]);
+
+/* ─── BUG 2: HINDI CITY NAME TO ENGLISH MAPPING FOR SERVICE CENTER MATCHING ──── */
+const cityToBranchMap = {
+  // Hindi (Devanagari) to English uppercase mapping for SERVICE_CENTERS
+  "अजमेर": "AJMER",
+  "alwar": "ALWAR",
+  "अलवर": "ALWAR",
+  "बांसवाड़ा": "BANSWARA",
+  "banswara": "BANSWARA",
+  "भरतपुर": "BHARATPUR",
+  "bharatpur": "BHARATPUR",
+  "भीलवाड़ा": "BHILWARA",
+  "bhilwara": "BHILWARA",
+  "भिवाड़ी": "BHIWADI",
+  "bhiwadi": "BHIWADI",
+  "दौसा": "DAUSA",
+  "dausa": "DAUSA",
+  "धौलपुर": "DHOLPUR",
+  "dholpur": "DHOLPUR",
+  "डूंगरपुर": "DUNGARPUR",
+  "dungarpur": "DUNGARPUR",
+  "जैपुर": "JAIPUR",
+  "jaipur": "JAIPUR",
+  "झालावाड़": "JHALAWAR",
+  "jhalawar": "JHALAWAR",
+  "झुंझुनू": "JHUNJHUNU",
+  "jhunjhunu": "JHUNJHUNU",
+  "करौली": "KARAULI",
+  "karauli": "KARAULI",
+  "कोटा": "KOTA",
+  "kota": "KOTA",
+  "सीकर": "SIKAR",
+  "sikar": "SIKAR",
+  "टोंक": "TONK",
+  "tonk": "TONK",
+  "उदयपुर": "UDAIPUR",
+  "udaipur": "UDAIPUR",
+};
+
 /* ======================= MACHINE TYPES ======================= */
 const machineTypeKeywords = {
   Warranty: [
@@ -1739,7 +1787,12 @@ const complaintMap = {
     },
   },
   "Oil Leak": {
-    keywords: ["oil leak", "leak", "oil", "तेल", "तेल बह रहा", "leaking"],
+    keywords: [
+      "oil leak", "leak", "oil", "तेल", "तेल बह रहा", "leaking",
+      // BUG 3b: Add Hindi leak phrases
+      "निकल रहा है", "बह रहा है", "टपक रहा है", "निकलना", "टपकना", "रिस रहा है",
+      "nikal raha hai", "bah raha hai", "tapak raha hai", "ris raha hai"
+    ],
     priority: 7,
     subTitles: {
       "Engine Oil Leak": ["engine", "engine leak", "तेल टपक रहा"],
@@ -1874,26 +1927,6 @@ const complaintMap = {
       Other: ["other", "general", "कुछ खराब", "और", "अन्य"],
     },
   },
-};
-
-/* ======================= CITY MAPPING ======================= */
-const cityToBranchMap = {
-  ajmer: { branch: "AJMER", outlet: "AJMER", cityCode: "1" },
-  अजमेर: { branch: "AJMER", outlet: "AJMER", cityCode: "1" },
-  kekri: { branch: "AJMER", outlet: "KEKRI", cityCode: "1" },
-  alwar: { branch: "ALWAR", outlet: "ALWAR", cityCode: "2" },
-  अलवर: { branch: "ALWAR", outlet: "ALWAR", cityCode: "2" },
-  bharatpur: { branch: "ALWAR", outlet: "BHARATPUR", cityCode: "2" },
-  bhilwara: { branch: "BHILWARA", outlet: "BHILWARA", cityCode: "3" },
-  भीलवाड़ा: { branch: "BHILWARA", outlet: "BHILWARA", cityCode: "3" },
-  jaipur: { branch: "JAIPUR", outlet: "JAIPUR", cityCode: "4" },
-  जयपुर: { branch: "JAIPUR", outlet: "JAIPUR", cityCode: "4" },
-  kota: { branch: "KOTA", outlet: "KOTA", cityCode: "5" },
-  कोटा: { branch: "KOTA", outlet: "KOTA", cityCode: "5" },
-  sikar: { branch: "SIKAR", outlet: "SIKAR", cityCode: "6" },
-  सीकर: { branch: "SIKAR", outlet: "SIKAR", cityCode: "6" },
-  udaipur: { branch: "UDAIPUR", outlet: "UDAIPUR", cityCode: "7" },
-  उदयपुर: { branch: "UDAIPUR", outlet: "UDAIPUR", cityCode: "7" },
 };
 
 /* ======================= SPEECH HELPERS ======================= */
@@ -2312,6 +2345,21 @@ function matchServiceCenter(speechInput) {
 
   for (const token of normalized) {
     if (token.length < 2) continue;
+    
+    // BUG 2: Check Hindi city name mapping first
+    const mappedCity = cityToBranchMap[token];
+    if (mappedCity) {
+      console.log(`   ✅ HINDI CITY MAPPED: "${token}" → ${mappedCity}`);
+      const matchedCenter = SERVICE_CENTERS.find(
+        (c) => c.city_name === mappedCity && c.is_active
+      );
+      if (matchedCenter) {
+        console.log(
+          `   ✅ MATCHED via Hindi mapping: ${matchedCenter.city_name}`
+        );
+        return matchedCenter;
+      }
+    }
 
     for (const center of SERVICE_CENTERS) {
       if (!center.is_active) continue;
@@ -2910,6 +2958,26 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
       // ── End CI Handler ──
+      
+      // BUG 1: Reject command/verb words as city name
+      const tokenized = rawSpeech.toLowerCase().split(/\s+/);
+      const isCommandOnly = tokenized.every((t) => verbCommandWords.has(t) && t.length > 0);
+      if (isCommandOnly || verbCommandWords.has(rawSpeech.toLowerCase().trim())) {
+        console.log(`   ⚠️ BUG 1 FIX: Rejecting command word as city: "${rawSpeech}"`);
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 2) {
+          callData.machineLocation = callData.customerData?.city || "Not Provided";
+          callData.city = extractCityName(callData.machineLocation);
+          callData.step = "ask_engineer_location";
+          callData.retries = 0;
+          ask(twiml, "Theek hai. Engineer kahan se bhejein — kaunsa shehar?");
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        ask(twiml, "Shehar ka naam boliye — Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur.");
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
@@ -3036,7 +3104,28 @@ router.post("/process", async (req, res) => {
 
       // ❌ NO MATCH — Use customer's custom input as address
       console.log(`   ⚠️ No service center matched — accepting custom address`);
-      callData.engineerAddress = rawSpeech.trim();
+      
+      // BUG 6: Strip instruction phrases from address before storing
+      let cleanAddress = rawSpeech.trim();
+      const instructionPhrases = [
+        "भेज दो", "भेजिए", "भेज दीजिए", "इंजीनियर को", "इंजीनियर भेजो",
+        "आप", "अच्छा", "ठीक है", "ठीक है भेज दो",
+        "bhej do", "bhejiye", "engineer ko", "aap", "achha", "theek hai",
+        "send karo", "engineer bhejo"
+      ];
+      for (const phrase of instructionPhrases) {
+        cleanAddress = cleanAddress.replace(new RegExp(`\\b${phrase}\\b`, "gi"), "");
+      }
+      cleanAddress = cleanAddress.trim();
+      
+      // If nothing left after stripping, use fallback
+      if (cleanAddress.length < 3) {
+        console.log(`   📝 BUG 6 FIX: Instruction phrase stripped, using fallback`);
+        cleanAddress = callData.city || callData.machineLocation || "Not Provided";
+      }
+      console.log(`   📝 BUG 6 FIX: Cleaned address: "${cleanAddress}" (was: "${rawSpeech.trim()}")`);
+      
+      callData.engineerAddress = cleanAddress;
       callData.jobLocation = detectJobLocation(rawSpeech) || "Onsite";
       callData.branch = "NA";
       callData.outlet = "NA";
@@ -3077,6 +3166,43 @@ router.post("/process", async (req, res) => {
       // ── End CI Handler ──
 
       const knownPhone = callData.customerData?.phone || "";
+      
+      // BUG 4a/4b/4c: Check if customer requesting phone change with digits in same breath
+      const changeIntent = /\b(change|badal|naya|dusra|nahi|update|change karna|badal do|naya number|dusra number|change kar de)\b/gi;
+      const isChangingPhone = changeIntent.test(rawSpeech) && knownPhone;
+      
+      if (isChangingPhone) {
+        console.log(`   📱 BUG 4a FIX: Customer requesting phone change: "${rawSpeech}"`);
+        const changeDigits = extractPhoneDigits(rawSpeech);
+        if (changeDigits.length >= 9 && changeDigits.length <= 12) {
+          // BUG 4c: Accept if 10 digits starting with 6,7,8,9 (Indian mobile)
+          const phone = changeDigits.length === 10 ? changeDigits : changeDigits.slice(-10);
+          const firstDigit = phone.charAt(0);
+          if (["6", "7", "8", "9"].includes(firstDigit)) {
+            console.log(`   ✅ BUG 4c FIX: Valid Indian mobile (${firstDigit}xxxxxxxx)`);
+            callData.callerPhone = phone;
+            callData.partialPhoneNo = "";
+            callData.step = "ask_complaint";
+            callData.retries = 0;
+            const readable = `${phone.slice(0, 5)} ${phone.slice(5)}`;
+            ask(twiml, `Achha. Number update ho gaya: ${readable}. Ab batayein — machine mein kya taklif hai?`);
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          } else {
+            // BUG 4b: Log why rejected
+            console.log(`   ❌ BUG 4b FIX: Invalid Indian mobile prefix: ${firstDigit}`);
+            ask(twiml, "Yeh mobile number sahi nahi hai — 6, 7, 8, ya 9 se start hona chahiye.");
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          }
+        } else {
+          // BUG 4b: Log wrong length
+          console.log(`   ❌ BUG 4b FIX: Wrong digit length: ${changeDigits.length}`);
+          ask(twiml, `Total ${changeDigits.length} digits mile. Pura 10 digit wala number boliye.`);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      }
 
       // Detect "save/wahi/sahi/use this" intent — treat as confirming existing number
       const isSaveIntent =
@@ -3452,6 +3578,14 @@ async function _submitAndClose(twiml, callData, CallSid) {
     twiml.say(
       { voice: "Polly.Aditi", language: "hi-IN" },
       `Complaint darz ho gayi. Number hai ${result.sapId.toString().split("").join(" ")} — note kar lijiye. Engineer jald call karenge. Namaskar!`,
+    );
+  } else if (result.success && !result.sapId) {
+    // BUG 5: Fallback when sapId is null but submission succeeded
+    console.log(`   ⚠️ BUG 5 FIX: Submission success but sapId is null. Full API response:`, result);
+    const chassisRef = callData.chassis ? callData.chassis.split("").join(" ") : "N/A";
+    twiml.say(
+      { voice: "Polly.Aditi", language: "hi-IN" },
+      `Aapki complaint mil gayi. Machine number ${chassisRef} ke liye engineer bheja jayega. Namaskar!`,
     );
   } else {
     twiml.say(
