@@ -280,14 +280,33 @@ const HELP_PATTERNS = [
 export function detectConversationalIntent(rawSpeech) {
   if (!rawSpeech || rawSpeech.trim().length === 0) return INTENT.NORMAL;
   const t = rawSpeech.toLowerCase().trim();
+  const wordCount = t.split(/\s+/).filter(w => w.length > 0).length;
 
-  // Priority order: CHECKING > WAIT > REPEAT > CONFUSED > HELP > COMPLAINT_DONE
-  if (CHECKING_PATTERNS.some(p => t.includes(p)))       return INTENT.CHECKING;
-  if (WAIT_PATTERNS.some(p => t.includes(p)))           return INTENT.WAIT;
-  if (REPEAT_PATTERNS.some(p => t.includes(p)))         return INTENT.REPEAT;
-  if (CONFUSED_PATTERNS.some(p => t.includes(p)))       return INTENT.CONFUSED;
-  if (HELP_PATTERNS.some(p => t.includes(p)))           return INTENT.HELP;
-  if (COMPLAINT_DONE_PATTERNS.some(p => t.includes(p))) return INTENT.COMPLAINT_DONE;
+  // Priority order unchanged
+  if (CHECKING_PATTERNS.some(p => t.includes(p)))  return INTENT.CHECKING;
+  if (WAIT_PATTERNS.some(p => t.includes(p)))       return INTENT.WAIT;
+  if (REPEAT_PATTERNS.some(p => t.includes(p)))     return INTENT.REPEAT;
+  if (CONFUSED_PATTERNS.some(p => t.includes(p)))   return INTENT.CONFUSED;
+  if (HELP_PATTERNS.some(p => t.includes(p)))       return INTENT.HELP;
+
+  // FIX: Short single-word triggers like "bas" only fire COMPLAINT_DONE
+  // when the utterance itself is short (< 5 words).
+  // This prevents "bas, engine start nahi ho raha" from being cut off.
+  if (COMPLAINT_DONE_PATTERNS.some(p => t.includes(p))) {
+    const SHORT_TRIGGERS = new Set([
+      'bas', 'बस', 'done', 'finished', 'complete',
+      'ho gaya', 'हो गया', 'khatam', 'bas yahi', 'बस यही',
+    ]);
+    const matchedPattern = COMPLAINT_DONE_PATTERNS.find(p => t.includes(p));
+    const isShortTrigger = SHORT_TRIGGERS.has(matchedPattern);
+
+    if (isShortTrigger && wordCount >= 5) {
+      // Long sentence — customer is mid-complaint, not signalling done
+      console.log(`   ⚠️ COMPLAINT_DONE suppressed — "${matchedPattern}" in long utterance (${wordCount} words)`);
+      return INTENT.NORMAL;
+    }
+    return INTENT.COMPLAINT_DONE;
+  }
 
   return INTENT.NORMAL;
 }
