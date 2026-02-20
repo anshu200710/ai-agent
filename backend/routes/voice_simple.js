@@ -1777,6 +1777,80 @@ const complaintMap = {
       Clunking: ["clunk", "clanking", "metallic", "धड़ाम"],
     },
   },
+  "Wiper System": {
+    keywords: [
+      "wiper", "वाइपर", "wiper nahi chal raha", "wiper kharab",
+      "wiper band", "wiper problem", "glass saaf nahi", "wiper chalana",
+      "windshield wiper", "wipers"
+    ],
+    priority: 6,
+    subTitles: {
+      "Wiper Not Working": ["nahi chal raha", "band", "kharab", "nahi", "काम नहीं कर रहा"],
+      "Wiper Slow": ["slow", "dheere", "dhima", "धीमी", "धीरे"],
+      "Wiper Noise": ["kharkhara", "खरखराना"]
+    }
+  },
+  "Tyre/Wheel": {
+    keywords: [
+      "tyre", "tire", "type", "टायर", "puncture", "flat", "pankchar",
+      "chakka", "चक्का", "wheel kharab", "rim", "tube", "पहिया"
+    ],
+    priority: 6,
+    subTitles: {
+      "Puncture": ["puncture", "pankchar", "flat", "hawa nahi", "हवा नहीं", "फटा"],
+      "Tyre Wear": ["ghisa", "wear", "purana", "घिसा", "पुरानी", "खराब"],
+      "Rim Damage": ["rim", "bent", "toda", "टूटा", "टेढ़ा", "नुकसान"]
+    }
+  },
+  "Track/Undercarriage": {
+    keywords: [
+      "track", "chain", "sprocket", "undercarriage", "ट्रैक", "चेन",
+      "patri", "पटरी", "track nahi chal raha", "track utar gaya",
+      "crawler", "undercarriage damage"
+    ],
+    priority: 7,
+    subTitles: {
+      "Track Off": ["utar gaya", "off", "girna", "nikal gaya", "उतर गई", "गिर गई"],
+      "Chain Break": ["tuta", "break", "cut", "टूटी", "टूट गई", "कट गई"],
+      "Sprocket Wear": ["ghisa", "wear", "sprocket", "घिसी", "घिस गई"]
+    }
+  },
+  "Exhaust": {
+    keywords: [
+      "silencer", "exhaust", "साइलेंसर", "एग्जॉस्ट", "pipe", "dhuan pipe",
+      "exhaust kharab", "silencer tuta", "muffler", "पाइप"
+    ],
+    priority: 5,
+    subTitles: {
+      "Silencer Broken": ["tuta", "crack", "phata", "दरार"],
+      "Smoke from Exhaust": ["dhuan", "smoke", "कala", "काला"]
+    }
+  },
+  "Cabin/Body": {
+    keywords: [
+      "glass", "शीशा", "sheesa", "door", "दरवाजा", "darwaza", "cabin",
+      "seat", "सीट", "mirror", "deur", "body damage",
+      "cabin tuta", "darwaza nahi band", "canopy", "कैनोपी"
+    ],
+    priority: 4,
+    subTitles: {
+      "Glass Broken": ["tuta", "crack", "दरार"],
+      "Door Problem": ["band nahi", "khulta nahi", "खुलता नहीं"],
+      "Seat Problem": ["tuti", "adjust nahi", "टूटी", "समायोजन नहीं"]
+    }
+  },
+  "Electrical Accessories": {
+    keywords: [
+      "horn", "हॉर्न", "light", "लाइट", "indicator", "headlight",
+      "work light", "horn nahi baj raha", "light nahi jal rahi",
+      "batti", "बत्ती", "electrical", "battery", "बैटरी"
+    ],
+    priority: 5,
+    subTitles: {
+      "Horn Not Working": ["nahi baj raha", "silent", "बजता नहीं"],
+      "Light Problem": ["headlight", "dark", "अंधेरा"]
+    }
+  },
   "General Problem": {
     keywords: [
       "problem",
@@ -1835,6 +1909,17 @@ function cleanSpeech(text) {
 function safeAscii(text) {
   if (!text) return "Unknown";
   return text.replace(/[^\w\s\-]/g, "").trim() || "Unknown";
+}
+
+/**
+ * extractCityName — Strip filler words from city input
+ * Removes: abhi, to, mein, hai, par, shehar, machine, etc.
+ */
+function extractCityName(text) {
+  if (!text) return "Unknown";
+  return text
+    .replace(/\b(abhi|to|mein|hai|par|shehar|machine|अभी|तो|में|है|पर|शहर|मशीन)\b/gi, "")
+    .trim() || text.trim();
 }
 
 function countWords(text) {
@@ -2417,6 +2502,9 @@ async function saveComplaint(callData) {
     console.log(
       `📍 Location: Branch=${branch}, Outlet=${outlet}, City_ID=${city_id}`,
     );
+    console.log(
+      `📍 Machine Location (customer's words): ${callData.machineLocation || "Not specified"}`,
+    );
 
     const payload = {
       machine_no: callData.chassis || "Unknown",
@@ -2770,7 +2858,7 @@ router.post("/process", async (req, res) => {
       if (isAffirmative(rawSpeech)) {
         callData.step = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = `Achha ji! Machine abhi kis shehar mein hai? `;
+        callData.lastQuestion = `Achha thik hai! Machine kahan par hai abhi? `;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2826,11 +2914,13 @@ router.post("/process", async (req, res) => {
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 3) {
-          callData.city = callData.customerData?.city || "NA";
+          // Fallback to customer's API city if available
+          callData.machineLocation = callData.customerData?.city || "Not Provided";
+          callData.city = extractCityName(callData.machineLocation);
           callData.step = "ask_engineer_location";
           callData.retries = 0;
           callData.lastQuestion =
-            "Theek hai ji. Ab yeh batayein ki engineer kahan aaye? Koi shehar, workshop, ya jagah ka naam boliye.";
+            "Theek hai. Engineer kahan se bhejein — kaunsa shehar?";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
@@ -2843,43 +2933,13 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // Try fuzzy matching against SERVICE_CENTERS
-      const matchedCenter = matchServiceCenter(rawSpeech);
-
-      if (matchedCenter) {
-        // ✅ MATCHED — Auto-populate all location data from SERVICE_CENTERS
-        console.log(
-          `   ✅ Service center matched at city step: ${matchedCenter.city_name}`,
-        );
-        callData.city = matchedCenter.city_name;
-        callData.engineerAddress = matchedCenter.city_add;
-        callData.branch = matchedCenter.branch_name;
-        callData.outlet = matchedCenter.city_name;
-        callData.city_id = matchedCenter.branch_code;
-        callData.lat = matchedCenter.lat;
-        callData.lng = matchedCenter.lng;
-        callData.sc_id = matchedCenter.id;
-        callData.jobLocation = "Workshop";
-        callData.retries = 0;
-
-        console.log(
-          `   📍 AUTO-POPULATED: Branch=${callData.branch}, Outlet=${callData.outlet}, City=${callData.city}`,
-        );
-
-        // Skip ask_engineer_location and go directly to phone
-        callData.step = "ask_phone";
-        callData.lastQuestion = _buildPhoneQuestion(callData);
-        askNumber(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      // ❌ NO MATCH — Just store city and ask for engineer location
-      callData.city = rawSpeech.trim();
+      // ✅ Accept any valid input — store as-is, will match in ask_engineer_location
+      callData.machineLocation = rawSpeech.trim();
+      callData.city = extractCityName(rawSpeech);
       callData.step = "ask_engineer_location";
       callData.retries = 0;
       callData.lastQuestion =
-        `Machine kahan rakhhi hai — workshop, khet, ya koi aur jagah?`;
+        "Engineer kahan se bhejein — kaunsa branch? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur.";
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -2904,6 +2964,14 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
+      // Handle pause requests — don't count against retries
+      const isPauseRequest = pauseKeywords.some((k) => rawSpeech.toLowerCase().includes(k));
+      if (isPauseRequest) {
+        ask(twiml, "Bilkul, main sun raha hoon. Jab ready ho jayen, tab shehar ka naam boliye.");
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       // Only reject pure silence/noise
       const isEmpty = !rawSpeech || rawSpeech.trim().length < 3;
       const isPureNoise =
@@ -2914,8 +2982,8 @@ router.post("/process", async (req, res) => {
       if (isPureNoise) {
         callData.retries = (callData.retries || 0) + 1;
         if (callData.retries >= 3) {
-          // Give up — use city as fallback
-          callData.engineerAddress = callData.city || "Not Provided";
+          // Give up — use machineLocation as fallback
+          callData.engineerAddress = callData.machineLocation || callData.city || "Not Provided";
           callData.jobLocation = "Onsite";
           callData.branch = "NA";
           callData.outlet = "NA";
@@ -2932,7 +3000,7 @@ router.post("/process", async (req, res) => {
         }
         ask(
           twiml,
-          "Jagah ka naam boliye — shehar, gaon, ya workshop.",
+          "Engineer kis jagah se aayenge — Jaipur, Kota, Ajmer, Alwar ?",
         );
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3028,7 +3096,7 @@ router.post("/process", async (req, res) => {
         callData.step = "ask_complaint";
         callData.retries = 0;
         callData.lastQuestion =
-          "Achha ji! Machine mein kya taklif hai? Engine, brake, hydraulic, AC — jo bhi problem ho, batayein.";
+          "Achha ab btayein! Machine mein kya taklif hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3041,7 +3109,7 @@ router.post("/process", async (req, res) => {
         callData.partialPhoneNo = "";
         callData.retries = 0;
         callData.lastQuestion =
-          "Theek hai ji. Apna sahi phone number boliye. Ek ek digit karke boliye, jaldi nahi hai.";
+          "Theek hai ji. Apna sahi phone number boliye.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3059,22 +3127,38 @@ router.post("/process", async (req, res) => {
         `   ➕ Total phone: "${accumulated}" (${accumulated.length} digits)`,
       );
 
-      if (accumulated.length >= 10) {
-        const phone = accumulated.slice(0, 10);
+      // Accept 9-12 digits (handles slight ASR overshoot), slice to 10
+      if (accumulated.length >= 9 && accumulated.length <= 12) {
+        const phone = accumulated.length === 10 ? accumulated : accumulated.slice(-10);
         callData.callerPhone = phone;
         callData.partialPhoneNo = "";
+        
+        // Check if customer confirmed number in same breath (e.g. "9602031359 haan")
+        const hasConfirmation = isAffirmative(rawSpeech.replace(/\d/g, "").trim());
+        if (hasConfirmation) {
+          // Skip confirm step — take number as-is
+          callData.step = "ask_complaint";
+          callData.retries = 0;
+          callData.lastQuestion =
+            "Achha btayein ! Machine mein kya taklif hai?";
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        
+        // Ask for confirmation with grouped display
         callData.step = "confirm_phone";
         callData.retries = 0;
-        const readable = phone.split("").join(" ");
+        const readable = `${phone.slice(0, 5)} ${phone.slice(5)}`;
         callData.lastQuestion = `${readable} — sahi hai?`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      if (accumulated.length > 0 && accumulated.length < 10) {
+      if (accumulated.length > 0 && accumulated.length < 9) {
         const readable = accumulated.split("").join(" ");
-        callData.lastQuestion = `${readable} — aaya ji. Ab baaki ke number bhi boliye.`;
+        callData.lastQuestion = `${readable} aaya — baaki boliye.`;
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3088,7 +3172,7 @@ router.post("/process", async (req, res) => {
         callData.step = "ask_complaint";
         callData.retries = 0;
         callData.lastQuestion =
-          "Koi baat nahi ji. Ab machine ki taklif batayein — kya problem hai?";
+          "Theek hai. Ab machine ki taklif batayein.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3326,20 +3410,17 @@ function _buildSummary(callData) {
 
   // Multi-complaint readback
   const complaints = callData.allComplaints || [];
-  const complaintText = _buildComplaintReadback(
-    complaints.length > 0
-      ? complaints
-      : [
-          {
-            complaint: callData.complaintTitle || "General Problem",
-            subTitle: callData.complaintSubTitle || "Other",
-          },
-        ],
-  );
 
   const chassisReadable =
     chassis !== "N/A" ? chassis.split("").join(" ") : chassis;
   const phoneReadable = phone !== "N/A" ? phone.split("").join(" ") : phone;
+
+  // Use customer's own words for complaint instead of category names
+  const complaintText = callData.rawComplaint
+    ? callData.rawComplaint
+        .replace(/\s*\|\s*/g, ", ") // replace pipe separators with commas
+        .substring(0, 150) // limit to 150 chars
+    : _buildComplaintReadback(complaints);
 
   return `Ek baar confirm karta hoon — ${name}, machine ${chassisReadable}, ${city}, phone ${phoneReadable}, taklif: ${complaintText}. Sab sahi hai?`;
 }

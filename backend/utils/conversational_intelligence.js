@@ -157,6 +157,11 @@ const CONFUSED_PATTERNS = [
   'pahli baar call kar raha', 'pehli baar call',
   'yeh kya number hai', 'yeh kya pooch raha',
   'mujhe nahi pata', 'pata nahi', 'pata nahi bhai',
+  'yeh number kya hain', 'yeh city ke liye kya',
+  'shayad', 'maybe', 'ho sakta hai', 'sambhav hai',
+  /* Additional confusion indicators */
+  'samajh me nahi aaya', 'clear nahi ho raha', 'confuse error',
+  'thoda aur samjhao', 'turant samajh me nahi aaya',
   // English / Hinglish
   'what do you mean', 'what does that mean', 'i dont understand',
   'i do not understand', 'confused', 'not clear',
@@ -165,18 +170,21 @@ const CONFUSED_PATTERNS = [
   'dont know what to say', 'not sure', 'unsure',
   'help me', 'please help', 'guide me',
   'what should i say', 'how to answer', 'what answer',
+  'what are you asking', 'lost',
+  'sorry could not understand', 'language problem',
   // Hindi (Devanagari script)
   'क्या', 'क्या मतलब', 'क्या मतलब है', 'क्या बोल रहे हो',
   'मतलब क्या है', 'मतलब क्या', 'मतलब बताओ',
   'क्या पूछ रहे हो', 'क्या चाहिए', 'क्या करना है',
   'नहीं समझा', 'नहीं समझी', 'समझ नहीं', 'समझ नहीं आया',
-  'नहीं समझा', 'कुछ नहीं समझ आया',
+  'कुछ नहीं समझ आया',
   'थोड़ा समझाओ', 'समझाओ', 'बताओ',
   'पहले से कुछ नहीं पता', 'नया कस्टमर हूँ',
   'पहली बार कॉल कर रहा हू', 'यह क्या नंबर है',
   'मुझे नहीं पता', 'पता नहीं', 'समझ में नहीं आया',
   'गाइड करो', 'समझा दो', 'साफ़ करके बोलो',
   'मुझे गाइड करो', 'गाइड कर दे', 'बता दे',
+  'शायद', 'हो सकता है', 'संभव है',
 ];
 
 /* =====================================================================
