@@ -3452,27 +3452,78 @@ router.post("/process", async (req, res) => {
       callData.complaintTitle = allDetected[0].complaint;
       callData.complaintSubTitle = allDetected[0].subTitle;
       callData.retries = 0;
-      callData.step = "final_confirmation";
+      callData.step = "clarify_complaint";
 
-      // Go directly to final confirmation and submit — skip re-confirmation
+      // Move to clarification step to ask if customer wants to add more details
       console.log(
-        `   ✅ Detected ${allDetected.length} complaint(s) — proceeding to submit`,
+        `   ✅ Detected ${allDetected.length} complaint(s) — asking if customer wants to add more details`,
       );
-      callData.lastQuestion = _buildSummary(callData);
+      const complaintNames = _buildComplaintReadback(allDetected);
+      callData.lastQuestion = `Maine aapki machine ke ${complaintNames} complaint save kar li hai. Kya aap apni problem ko details se samjhana chahte hain ya main complaint puri tarah save kar du?`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
 
     /* ──────────────────────────────────────────────────────
-       STEP 7: FINAL CONFIRMATION (SKIPPED confirm_complaint)
-       Removed re-confirmation step. Customer's first answer is final.
-       Now just auto-processes and submits.
+       STEP 7: CLARIFY COMPLAINT
+       Ask customer if they want to add more details or save now
     ────────────────────────────────────────────────────── */
+    if (callData.step === "clarify_complaint") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
+      // Customer wants to add more details — go back to ask_complaint
+      if (isAffirmative(rawSpeech)) {
+        console.log(`   ✅ Customer wants to add more details`);
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai ji. Ab aur kya problem hai machine mein? Jitne chahiye utne batayein.";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Customer wants to save now — go to final confirmation
+      if (isNegative(rawSpeech)) {
+        console.log(`   ✅ Customer ready to save complaint`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        callData.lastQuestion = _buildSummary(callData);
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Unclear response — re-ask
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 2) {
+        // Default to save if confused
+        console.log(`   ⚠️ Unclear response, defaulting to save`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        callData.lastQuestion = _buildSummary(callData);
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      ask(twiml, "Haan boliye ya nahi — aur details add karni hain ya save kar du?");
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
 
     /* ──────────────────────────────────────────────────────
-       STEP 8: AUTO-SUBMIT (No re-confirmation)
-       After detecting complaints, directly submit without asking Y/N
+       STEP 8: FINAL CONFIRMATION
+       Customer confirms the summary before submission
     ────────────────────────────────────────────────────── */
     if (callData.step === "final_confirmation") {
       // Any input triggers immediate submission — customer's first data is final
