@@ -3606,12 +3606,12 @@ router.post("/process", async (req, res) => {
       callData.retries = 0;
       callData.step = "clarify_complaint";
 
-      // Move to clarification step to ask if customer wants to add more details
+      // Move to clarification step to ask if customer wants to FULLY explain their complaint
       console.log(
-        `   ✅ Detected ${allDetected.length} complaint(s) — asking if customer wants to add more details`,
+        `   ✅ Detected ${allDetected.length} complaint(s) — asking if customer wants to fully explain`,
       );
       const complaintNames = _buildComplaintReadback(allDetected);
-      callData.lastQuestion = `Maine aapki machine ke ${complaintNames} complaint save kar li hai. Kya aap apni problem ko details se samjhana chahte hain ya main complaint puri tarah save kar du?`;
+      callData.lastQuestion = `Maine aapki machine ke ${complaintNames} complaint samjh gaya. Ab kya aap apni problem ko puri tarah samjhana chahte hain ya main bas itne hi complaint details save kar du?`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -3619,7 +3619,9 @@ router.post("/process", async (req, res) => {
 
     /* ──────────────────────────────────────────────────────
        STEP 7: CLARIFY COMPLAINT
-       Ask customer if they want to add more details or save now
+       Ask customer if they want to FULLY explain their complaint
+       If YES → go to explain_complaint (capture all details)
+       If NO → direct save (final_confirmation)
     ────────────────────────────────────────────────────── */
     if (callData.step === "clarify_complaint") {
       // ── Conversational Intelligence Handler ──
@@ -3634,24 +3636,21 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
-      // Customer wants to add more details — go back to ask_complaint
+      // Customer WANTS to explain fully — go to explain_complaint step
       if (isAffirmative(rawSpeech)) {
-        console.log(`   ✅ Customer wants to add more details`);
-        callData.step = "ask_complaint";
+        console.log(`   ✅ Customer wants to explain complaint fully`);
+        callData.step = "explain_complaint";
         callData.retries = 0;
-        callData.lastQuestion = "Theek hai ji. Ab aur kya problem hai machine mein? Jitne chahiye utne batayein.";
+        callData.complaintExplanation = ""; // Initialize explanation buffer
+        callData.lastQuestion = "Theek hai ji. Ab apni complaint ko puri tarah samjhayein — kya problem hai, kab se hai, machine kya kar raha hai? Jitne chahiye utne details boliye.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // Customer wants to save now — go to final confirmation
-      // Check for finalize keywords like "बस इतना ही" (bas itna hi), "नहीं" (nahi), etc.
-      const hasFinializeKeyword = finalizeComplaintKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
-      const wantsToSave = isNegative(rawSpeech) || hasFinializeKeyword;
-      
-      if (wantsToSave) {
-        console.log(`   ✅ Customer ready to save complaint (finalize keywords detected or negative response)`);
+      // Customer does NOT want to explain — direct save
+      if (isNegative(rawSpeech)) {
+        console.log(`   ✅ Customer does NOT want to fully explain — direct save`);
         callData.step = "final_confirmation";
         callData.retries = 0;
         callData.lastQuestion = _buildSummary(callData);
@@ -3663,8 +3662,8 @@ router.post("/process", async (req, res) => {
       // Unclear response — re-ask
       callData.retries = (callData.retries || 0) + 1;
       if (callData.retries >= 2) {
-        // Default to save if confused
-        console.log(`   ⚠️ Unclear response, defaulting to save`);
+        // Default to direct save if confused
+        console.log(`   ⚠️ Unclear response, defaulting to direct save`);
         callData.step = "final_confirmation";
         callData.retries = 0;
         callData.lastQuestion = _buildSummary(callData);
@@ -3672,7 +3671,88 @@ router.post("/process", async (req, res) => {
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-      ask(twiml, "Haan boliye ya nahi — aur details add karni hain ya save kar du?");
+      ask(twiml, "Haan boliye ya nahi — apni complaint puri tarah samjhana chahte hain?");
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    /* ──────────────────────────────────────────────────────
+       STEP 7a: EXPLAIN COMPLAINT
+       Customer provides full explanation of their complaint
+       Capture all details and add to complaint_details field
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "explain_complaint") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
+      // Capture explanation details
+      if (rejectInvalid(rawSpeech)) {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 3) {
+          // After 3 no-response attempts, proceed to save
+          console.log(`   ⚠️ EXPLAIN_COMPLAINT: No clear explanation after ${callData.retries} retries, proceeding to save`);
+          callData.step = "final_confirmation";
+          callData.retries = 0;
+          callData.lastQuestion = _buildSummary(callData);
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        ask(twiml, "Bilkul, main sun raha hoon. Aur details batayein.");
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Append explanation to buffer
+      callData.complaintExplanation = (callData.complaintExplanation || "") + (callData.complaintExplanation ? " | " : "") + rawSpeech;
+      console.log(`   📝 EXPLAIN_COMPLAINT: Captured explanation: "${rawSpeech}"`);
+
+      // Check if customer is done explaining
+      // Keywords: "बस यही है", "बस इतना ही", "नहीं कुछ और नहीं", "यही है मेरी समस्या"
+      const doneExplainingKeywords = [
+        "बस यही है",
+        "बस इतना ही", 
+        "नहीं कुछ और",
+        "और कुछ नहीं",
+        "यही है",
+        "बस",
+        "खत्म हो गया",
+        "बात खत्म",
+        "इतना काफी",
+        "that's all",
+        "nothing more",
+        "bas itna hi",
+        "bas yehi hai",
+      ];
+      
+      const isDoneExplaining = doneExplainingKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase())) 
+        || isNegative(rawSpeech.replace(/^(और|aur|kya|या|or)\s+/i, "")); // Exclude negations from follow-up questions
+      
+      if (isDoneExplaining) {
+        console.log(`   ✅ EXPLAIN_COMPLAINT: Customer finished explaining - proceeding to save`);
+        // Append full explanation to rawComplaint
+        callData.rawComplaint = callData.rawComplaint + " [DETAILED EXPLANATION: " + callData.complaintExplanation + "]";
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        callData.lastQuestion = _buildSummary(callData);
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Customer continuing to explain — ask if they have more details
+      callData.retries = 0;
+      callData.lastQuestion = "Theek hai. Aur bhi keucho hai ji? Ya bas itna hi?";
+      ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
