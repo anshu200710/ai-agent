@@ -15,9 +15,9 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://192.168.1.40/jcbServiceEnginerAPIv7";
+const EXTERNAL_API_BASE = "http://192.168.1.36/jcbServiceEnginerAPIv7";
 const COMPLAINT_API_URL =
-  "http://192.168.1.40/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+  "http://192.168.1.36/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -525,6 +525,7 @@ const affirmativeKeywords = [
   "बिल्कुल",
   "ठीक है",
   "सही है",
+  "नहीं सही है",
   // Hindi — With pronouns (I, my, me context)
   "हा मैं हूँ",
   "हा मेरी है",
@@ -797,6 +798,74 @@ const falseNegativePhrases = [
   "bas yahi",
   "बस यही",
   "इतना ही काफी",
+];
+
+// Keywords to finalize complaint — indicates customer is done and wants to save
+const finalizeComplaintKeywords = [
+  "बस इतना ही",
+  "बस इतना ही",
+  "बस यही",
+  "बस ये",
+  "बस",
+  "और कुछ नहीं",
+  "कोई और नहीं",
+  "बाकी नहीं",
+  "उसके बाद नहीं",
+  "itna hi",
+  "bas itna hi",
+  "bas yahi",
+  "bas ये",
+  "bas ye",
+  "ek hi",
+  "that's all",
+  "that is all",
+  "nothing more",
+  "no more",
+  "that's it",
+  "save karo",
+  "सेव कर दो",
+  "दर्ज कर दो",
+  "दर्ज करो",
+  "रजिस्टर कर दो",
+  "मेरा शिकायत बस यही है",
+];
+
+// Keywords to use calling phone number — skip asking for new number
+const useCallingNumberKeywords = [
+  "isi number",
+  "इसी नंबर",
+  "यही नंबर",
+  "यहीं नंबर",
+  "use this number",
+  "this phone",
+  "इस नंबर से",
+  "जिस नंबर से",
+  "जिस से बात",
+  "calling से",
+  "अंदर वाले से",
+  "वो नंबर",
+  "इसी से",
+  "save kar lo",
+  "save kar do",
+  "रहने दो",
+  "चलेगा",
+];
+
+// Enhanced affirmative keywords to understand colloquial phrases like "haa haa bhai", "bilkul bilkul", etc
+const colloquialAffirmatives = [
+  "haa haa",
+  "हाँ हाँ",
+  "हा हा",
+  "bilkul bilkul",
+  "बिल्कुल बिल्कुल",
+  "bilkul",
+  "बिल्कुल",
+  "bhai haan",
+  "भैया हाँ",
+  "didi haan",
+  "दीदी हाँ",
+  "haan bilkul",
+  "हाँ बिल्कुल",
 ];
 
 /* ─── CLARIFICATION KEYWORDS: Help identify when customer needs re-asking ──── */
@@ -2606,9 +2675,13 @@ router.post("/", async (req, res) => {
   const { CallSid, From } = req.body;
   const twiml = new VoiceResponse();
 
+  // Extract calling number from Twilio (remove country code if present)
+  const callingNumber = From ? From.replace(/^\+1/, "").slice(-10) : "";
+
   activeCalls.set(CallSid, {
     callSid: CallSid,
     from: From,
+    callingNumber: callingNumber, // Store caller's phone number (last 10 digits)
     step: "ivr_menu",
     retries: 0,
     partialMachineNo: "", // accumulates digit groups for machine number
@@ -2694,7 +2767,7 @@ router.post("/process", async (req, res) => {
         callData.retries = 0;
         callData.partialMachineNo = "";
         callData.lastQuestion =
-          "Pehle machine ka number chahiye. ek ek digit boliye.";
+          "mujhe apni machine ka number btaiye ek ek puraa number.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2906,7 +2979,7 @@ router.post("/process", async (req, res) => {
       if (isAffirmative(rawSpeech)) {
         callData.step = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = `Achha thik hai! Machine kahan par hai abhi? `;
+        callData.lastQuestion = `Achha thik hai! Aapki machine abhi kis jagah par hai? Jis shehar ya gaon mein aapka machine abhi khara hai?`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -2930,7 +3003,7 @@ router.post("/process", async (req, res) => {
         // Assume correct and move on — don't keep customer waiting
         callData.step = "ask_city";
         callData.retries = 0;
-        callData.lastQuestion = `Theek hai ji. Aapki machine abhi kis shehar mein hai?`;
+        callData.lastQuestion = `Theek hai ji. Aapki machine abhi kis location par hai? Kaunsa shehar ya jagah?`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3001,13 +3074,22 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // ✅ Accept any valid input — store as-is, will match in ask_engineer_location
-      callData.machineLocation = rawSpeech.trim();
-      callData.city = extractCityName(rawSpeech);
+      // ✅ Try to fuzzy match city against SERVICE_CENTERS
+      const matchedCity = matchServiceCenter(rawSpeech);
+      if (matchedCity) {
+        console.log(`   🔍 ASK_CITY: Matched city "${rawSpeech}" → ${matchedCity.city_name}`);
+        callData.machineLocation = matchedCity.city_name;
+        callData.city = matchedCity.city_name;
+      } else {
+        console.log(`   ⚠️ ASK_CITY: No service center match for "${rawSpeech}"`);
+        callData.machineLocation = rawSpeech.trim();
+        callData.city = extractCityName(rawSpeech);
+      }
+      
       callData.step = "ask_engineer_location";
       callData.retries = 0;
       callData.lastQuestion =
-        "Engineer kahan se bhejein — kaunsa branch? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur.";
+        "Engineer kahan se aayenge? Aapka registered service center kaunsa hai? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya koi aur branch?";
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -3016,8 +3098,8 @@ router.post("/process", async (req, res) => {
     /* ──────────────────────────────────────────────────────
        STEP 4: ASK ENGINEER BASE / ADDRESS
        Fuzzy match against SERVICE_CENTERS database.
-       Auto-populate: branch, outlet, city_id, lat, lng, address
-       No confirmation — match is final.
+       If NO match → ask for registered city name (don't accept invalid addresses)
+       If match → auto-populate: branch, outlet, city_id, lat, lng, address
     ────────────────────────────────────────────────────── */
     if (callData.step === "ask_engineer_location") {
       // ── Conversational Intelligence Handler ──
@@ -3102,43 +3184,32 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
 
-      // ❌ NO MATCH — Use customer's custom input as address
-      console.log(`   ⚠️ No service center matched — accepting custom address`);
+      // ❌ NO MATCH — Ask for registered city name (don't accept invalid)
+      console.log(`   ⚠️ No service center matched — asking for registered city name`);
+      callData.retries = (callData.retries || 0) + 1;
       
-      // BUG 6: Strip instruction phrases from address before storing
-      let cleanAddress = rawSpeech.trim();
-      const instructionPhrases = [
-        "भेज दो", "भेजिए", "भेज दीजिए", "इंजीनियर को", "इंजीनियर भेजो",
-        "आप", "अच्छा", "ठीक है", "ठीक है भेज दो",
-        "bhej do", "bhejiye", "engineer ko", "aap", "achha", "theek hai",
-        "send karo", "engineer bhejo"
-      ];
-      for (const phrase of instructionPhrases) {
-        cleanAddress = cleanAddress.replace(new RegExp(`\\b${phrase}\\b`, "gi"), "");
+      if (callData.retries >= 3) {
+        // After 3 retries, give up and set default
+        console.log(`   📝 Max retries reached, using fallback`);
+        callData.engineerAddress = callData.city || callData.machineLocation || "Not Provided";
+        callData.jobLocation = "Unknown";
+        callData.branch = "NA";
+        callData.outlet = "NA";
+        callData.city_id = "NA";
+        callData.lat = 0;
+        callData.lng = 0;
+        callData.sc_id = null;
+        callData.retries = 0;
+        callData.step = "ask_phone";
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
       }
-      cleanAddress = cleanAddress.trim();
       
-      // If nothing left after stripping, use fallback
-      if (cleanAddress.length < 3) {
-        console.log(`   📝 BUG 6 FIX: Instruction phrase stripped, using fallback`);
-        cleanAddress = callData.city || callData.machineLocation || "Not Provided";
-      }
-      console.log(`   📝 BUG 6 FIX: Cleaned address: "${cleanAddress}" (was: "${rawSpeech.trim()}")`);
-      
-      callData.engineerAddress = cleanAddress;
-      callData.jobLocation = detectJobLocation(rawSpeech) || "Onsite";
-      callData.branch = "NA";
-      callData.outlet = "NA";
-      callData.city_id = "NA";
-      callData.lat = 0;
-      callData.lng = 0;
-      callData.sc_id = null;
-      callData.retries = 0;
-
-      // Move to next step — NO CONFIRMATION
-      callData.step = "ask_phone";
-      callData.lastQuestion = _buildPhoneQuestion(callData);
-      askNumber(twiml, callData.lastQuestion);
+      // Ask for registered city name
+      callData.lastQuestion = `Sir, apna registered service center ka naam batiye. Kaunsa branch hai — Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara? Taaki mai aapki city sahi se fetch kar saku.`;
+      ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -3166,6 +3237,20 @@ router.post("/process", async (req, res) => {
       // ── End CI Handler ──
 
       const knownPhone = callData.customerData?.phone || "";
+      
+      // BUG FIX: Check if customer wants to use calling number ("isi number save kar lo" or "use this calling number")
+      const wantsCallingNumber = useCallingNumberKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (wantsCallingNumber && callData.callingNumber) {
+        console.log(`   📞 BUG FIX: Customer wants to use calling number: ${callData.callingNumber}`);
+        callData.callerPhone = callData.callingNumber;
+        callData.partialPhoneNo = "";
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        const readable = `${callData.callingNumber.slice(0, 5)} ${callData.callingNumber.slice(5)}`;
+        ask(twiml, `Achha. Aapke number ${readable} se complaint save kar denge. Ab batayein — machine mein kya taklif hai?`);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
       
       // BUG 4a/4b/4c: Check if customer requesting phone change with digits in same breath
       const changeIntent = /\b(change|badal|naya|dusra|nahi|update|change karna|badal do|naya number|dusra number|change kar de)\b/gi;
@@ -3209,10 +3294,13 @@ router.post("/process", async (req, res) => {
         /\b(save|sev|wahi|wahin|usi|same|sahi|theek|haan|use|rakh|rakho|yahi|isko)\b/i.test(
           rawSpeech,
         ) && !/^\d/.test(rawSpeech.trim());
+      
+      // Also check colloquial affirmatives like "haa haa bhai", "bilkul bilkul"
+      const isColloquialAffirmative = colloquialAffirmatives.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
 
-      // If customer confirms existing number (affirmative OR save-intent)
+      // If customer confirms existing number (affirmative OR save-intent OR colloquial)
       if (
-        (isAffirmative(rawSpeech) || isSaveIntent) &&
+        (isAffirmative(rawSpeech) || isSaveIntent || isColloquialAffirmative) &&
         knownPhone &&
         knownPhone !== "Unknown" &&
         callData.partialPhoneNo === ""
@@ -3247,41 +3335,61 @@ router.post("/process", async (req, res) => {
         `   📱 Extracted phone digits: "${phoneDigits}" | Buffer: "${callData.partialPhoneNo}"`,
       );
 
+      // VALIDATION: If new digits detected, ask for explicit confirmation first
+      if (phoneDigits.length >= 9) {
+        const potentialPhone = phoneDigits.length === 10 ? phoneDigits : phoneDigits.slice(-10);
+        const firstDigit = potentialPhone.charAt(0);
+        
+        // Check if valid Indian mobile (starts with 6,7,8,9)
+        if (["6", "7", "8", "9"].includes(firstDigit)) {
+          console.log(`   📝 NEW PHONE DETECTED: ${potentialPhone} - asking for validation`);
+          // Store as temporary and ask for explicit confirmation
+          callData.tempPhone = potentialPhone;
+          callData.step = "validate_phone";
+          callData.retries = 0;
+          const readable = `${potentialPhone.slice(0, 5)} ${potentialPhone.slice(5)}`;
+          callData.lastQuestion = `Aapka ye number sahi hai kya? ${readable} — haan ya nahi?`;
+          ask(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        } else {
+          console.log(`   ❌ VALIDATION FAILED: Invalid prefix ${firstDigit}`);
+          ask(twiml, "Yeh number sahi nahi — 6, 7, 8 ya 9 se start hona chahiye.");
+          callData.partialPhoneNo = "";
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      }
+
       callData.partialPhoneNo = (callData.partialPhoneNo || "") + phoneDigits;
       const accumulated = callData.partialPhoneNo;
       console.log(
         `   ➕ Total phone: "${accumulated}" (${accumulated.length} digits)`,
       );
 
-      // Accept 9-12 digits (handles slight ASR overshoot), slice to 10
-      if (accumulated.length >= 9 && accumulated.length <= 12) {
-        const phone = accumulated.length === 10 ? accumulated : accumulated.slice(-10);
-        callData.callerPhone = phone;
-        callData.partialPhoneNo = "";
-        
-        // Check if customer confirmed number in same breath (e.g. "9602031359 haan")
-        const hasConfirmation = isAffirmative(rawSpeech.replace(/\d/g, "").trim());
-        if (hasConfirmation) {
-          // Skip confirm step — take number as-is
+      // No usable digits yet
+      if (accumulated.length === 0) {
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 3) {
+          callData.callerPhone = knownPhone || "Unknown";
+          callData.partialPhoneNo = "";
           callData.step = "ask_complaint";
           callData.retries = 0;
-          callData.lastQuestion =
-            "Achha btayein ! Machine mein kya taklif hai?";
+          callData.lastQuestion = "Theek hai. Ab machine ki taklif batayein.";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
-        
-        // Ask for confirmation with grouped display
-        callData.step = "confirm_phone";
-        callData.retries = 0;
-        const readable = `${phone.slice(0, 5)} ${phone.slice(5)}`;
-        callData.lastQuestion = `${readable} — sahi hai?`;
-        ask(twiml, callData.lastQuestion);
+        callData.lastQuestion =
+          knownPhone && knownPhone !== "Unknown"
+            ? `Humhare paas number ${knownPhone.split("").join(" ")} hai. Kya yeh sahi hai?`
+            : "Apna mobile number boliye, ek ek digit mein.";
+        askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
 
+      // Digits accumulating but not complete yet
       if (accumulated.length > 0 && accumulated.length < 9) {
         const readable = accumulated.split("").join(" ");
         callData.lastQuestion = `${readable} aaya — baaki boliye.`;
@@ -3289,25 +3397,69 @@ router.post("/process", async (req, res) => {
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
+    }
 
-      // No usable digits
-      callData.retries = (callData.retries || 0) + 1;
-      if (callData.retries >= 4) {
-        callData.callerPhone = knownPhone || "Unknown";
+    /* ──────────────────────────────────────────────────────
+       STEP 5a: VALIDATE PHONE
+       Explicitly ask customer to confirm extracted phone number
+       Only move forward on explicit "हा/हान" or "नहीं" 
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "validate_phone") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
+      const tempPhone = callData.tempPhone;
+
+      // Customer confirms this IS their phone number
+      if (isAffirmative(rawSpeech)) {
+        console.log(`   ✅ PHONE VALIDATED: Customer confirmed ${tempPhone}`);
+        callData.callerPhone = tempPhone;
+        callData.tempPhone = null;
         callData.partialPhoneNo = "";
         callData.step = "ask_complaint";
         callData.retries = 0;
-        callData.lastQuestion =
-          "Theek hai. Ab machine ki taklif batayein.";
+        const readable = `${tempPhone.slice(0, 5)} ${tempPhone.slice(5)}`;
+        callData.lastQuestion = "Achha! Ab batayein — machine mein kya taklif hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
-      callData.lastQuestion =
-        knownPhone && knownPhone !== "Unknown"
-          ? `Humhare paas number ${knownPhone.split("").join(" ")} hai. Kya yeh sahi hai?`
-          : "Apna mobile number boliye, ek ek digit mein.";
-      askNumber(twiml, callData.lastQuestion);
+
+      // Customer says this is NOT their phone number
+      if (isNegative(rawSpeech)) {
+        console.log(`   ❌ PHONE REJECTED: Customer says this is not their number`);
+        callData.tempPhone = null;
+        callData.partialPhoneNo = "";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai. Apna sahi phone number dobara boliye.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Unclear response
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 2) {
+        // Default to reject if confused
+        console.log(`   ⚠️ UNCLEAR VALIDATION: Defaulting to rejection after ${callData.retries} retries`);
+        callData.tempPhone = null;
+        callData.partialPhoneNo = "";
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai. Sahi phone number boliye.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      ask(twiml, "Bas haan boliye ya nahi — kya ye aapka number hai?");
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
     }
@@ -3494,8 +3646,12 @@ router.post("/process", async (req, res) => {
       }
 
       // Customer wants to save now — go to final confirmation
-      if (isNegative(rawSpeech)) {
-        console.log(`   ✅ Customer ready to save complaint`);
+      // Check for finalize keywords like "बस इतना ही" (bas itna hi), "नहीं" (nahi), etc.
+      const hasFinializeKeyword = finalizeComplaintKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      const wantsToSave = isNegative(rawSpeech) || hasFinializeKeyword;
+      
+      if (wantsToSave) {
+        console.log(`   ✅ Customer ready to save complaint (finalize keywords detected or negative response)`);
         callData.step = "final_confirmation";
         callData.retries = 0;
         callData.lastQuestion = _buildSummary(callData);
