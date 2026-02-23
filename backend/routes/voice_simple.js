@@ -15,9 +15,12 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://192.168.1.36/jcbServiceEnginerAPIv7";
+const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
 const COMPLAINT_API_URL =
-  "http://192.168.1.36/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+  "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const EXTERNAL_API_BASE = "http://192.168.1.36/jcbServiceEnginerAPIv7";
+// const COMPLAINT_API_URL =
+//   "http://192.168.1.36/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -1071,6 +1074,7 @@ const cityToBranchMap = {
   "सीकर": "SIKAR",
   "sikar": "SIKAR",
   "टोंक": "TONK",
+  "सॉन्ग": "TONK",
   "tonk": "TONK",
   "उदयपुर": "UDAIPUR",
   "udaipur": "UDAIPUR",
@@ -1627,6 +1631,11 @@ const complaintMap = {
     keywords: [
       // Hindi — the critical ones that were missing
       "ऐसी",
+      "ऐ.सी",
+      "ऐ सी",
+      "ऐ",
+      "ऐकी",
+      "एसी खराब",
       "एसी",
       "ए.सी",
       "ए सी",
@@ -3080,16 +3089,36 @@ router.post("/process", async (req, res) => {
         console.log(`   🔍 ASK_CITY: Matched city "${rawSpeech}" → ${matchedCity.city_name}`);
         callData.machineLocation = matchedCity.city_name;
         callData.city = matchedCity.city_name;
-      } else {
-        console.log(`   ⚠️ ASK_CITY: No service center match for "${rawSpeech}"`);
-        callData.machineLocation = rawSpeech.trim();
-        callData.city = extractCityName(rawSpeech);
+        callData.step = "ask_engineer_location";
+        callData.retries = 0;
+        callData.lastQuestion =
+          "Engineer kahan se aayenge? Aapka registered service center kaunsa hai? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya koi aur branch?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
       }
       
-      callData.step = "ask_engineer_location";
-      callData.retries = 0;
+      // ❌ NO MATCH — Reject invalid city and ask again
+      console.log(`   ❌ ASK_CITY: No service center match for "${rawSpeech}" — rejecting as invalid`);
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 3) {
+        // After 3 retries, use customer's registered city
+        const fallbackCity = callData.customerData?.city || "Not Provided";
+        callData.machineLocation = fallbackCity;
+        callData.city = fallbackCity;
+        console.log(`   📝 ASK_CITY: Using fallback city: ${fallbackCity}`);
+        callData.step = "ask_engineer_location";
+        callData.retries = 0;
+        callData.lastQuestion =
+          "Engineer kahan se aayenge — aapka registered service center kaunsa hai?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      
+      // Ask again with valid options
       callData.lastQuestion =
-        "Engineer kahan se aayenge? Aapka registered service center kaunsa hai? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya koi aur branch?";
+        "Shehar sahi nahi hai. Apna registered city bataye — Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara, ya koi aur?";
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -3131,8 +3160,8 @@ router.post("/process", async (req, res) => {
 
       if (isPureNoise) {
         callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
-          // Give up — use machineLocation as fallback
+        if (callData.retries >= 5) {
+          // Give up — use machineLocation as fallback (increased from 3 to 5 retries)
           callData.engineerAddress = callData.machineLocation || callData.city || "Not Provided";
           callData.jobLocation = "Onsite";
           callData.branch = "NA";
@@ -3150,7 +3179,7 @@ router.post("/process", async (req, res) => {
         }
         ask(
           twiml,
-          "Engineer kis jagah se aayenge — Jaipur, Kota, Ajmer, Alwar ?",
+          "Engineer kis jagah se aayenge — Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara?",
         );
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3188,9 +3217,9 @@ router.post("/process", async (req, res) => {
       console.log(`   ⚠️ No service center matched — asking for registered city name`);
       callData.retries = (callData.retries || 0) + 1;
       
-      if (callData.retries >= 3) {
-        // After 3 retries, give up and set default
-        console.log(`   📝 Max retries reached, using fallback`);
+      if (callData.retries >= 5) {
+        // After 5 retries, give up and set default (increased from 3 to 5)
+        console.log(`   📝 Max ${callData.retries} retries reached, using fallback`);
         callData.engineerAddress = callData.city || callData.machineLocation || "Not Provided";
         callData.jobLocation = "Unknown";
         callData.branch = "NA";
@@ -3253,12 +3282,12 @@ router.post("/process", async (req, res) => {
       }
       
       // BUG 4a/4b/4c: Check if customer requesting phone change with digits in same breath
-      const changeIntent = /\b(change|badal|naya|dusra|nahi|update|change karna|badal do|naya number|dusra number|change kar de)\b/gi;
+      const changeIntent = /\b(change|badal|naya|dusra|nahi|badalna|update|change karna|badal do|naya number|dusra number|change kar de)\b/gi;
       const isChangingPhone = changeIntent.test(rawSpeech) && knownPhone;
+      const changeDigits = extractPhoneDigits(rawSpeech);
       
       if (isChangingPhone) {
-        console.log(`   📱 BUG 4a FIX: Customer requesting phone change: "${rawSpeech}"`);
-        const changeDigits = extractPhoneDigits(rawSpeech);
+        console.log(`   📱 BUG 4a FIX: Customer requesting phone change: "${rawSpeech}" | Digits: ${changeDigits}`);
         if (changeDigits.length >= 9 && changeDigits.length <= 12) {
           // BUG 4c: Accept if 10 digits starting with 6,7,8,9 (Indian mobile)
           const phone = changeDigits.length === 10 ? changeDigits : changeDigits.slice(-10);
@@ -3276,14 +3305,35 @@ router.post("/process", async (req, res) => {
           } else {
             // BUG 4b: Log why rejected
             console.log(`   ❌ BUG 4b FIX: Invalid Indian mobile prefix: ${firstDigit}`);
-            ask(twiml, "Yeh mobile number sahi nahi hai — 6, 7, 8, ya 9 se start hona chahiye.");
+            callData.retries = (callData.retries || 0) + 1;
+            ask(twiml, `Yeh number sahi nahi — ${firstDigit} se start ho raha hai. 6, 7, 8 ya 9 se hona chahiye. Dobara boliye.`);
             activeCalls.set(CallSid, callData);
             return res.type("text/xml").send(twiml.toString());
           }
-        } else {
-          // BUG 4b: Log wrong length
+        } else if (changeDigits.length > 0 && changeDigits.length < 9) {
+          // BUG 4b: Log wrong length — ask again
           console.log(`   ❌ BUG 4b FIX: Wrong digit length: ${changeDigits.length}`);
-          ask(twiml, `Total ${changeDigits.length} digits mile. Pura 10 digit wala number boliye.`);
+          callData.retries = (callData.retries || 0) + 1;
+          ask(twiml, `Bas ${changeDigits.length} digits sune. Pura 10 digit wala number dobara boliye.`);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+      }
+      
+      // NEW: Check if customer says "नहीं बदलना है" (don't want to change) WITH a phone number → extract and use it
+      const dontChangeWithPhone = /\b(nahi|na|nai|नहीं|न|ना|नै)\b.*\b(badalna|badalna|badal)\b/gi.test(rawSpeech) && changeDigits.length >= 9;
+      if (dontChangeWithPhone) {
+        console.log(`   📞 IMPROVED LOGIC: Customer said "नहीं बदलना है" WITH phone digits: ${changeDigits}`);
+        const phone = changeDigits.length === 10 ? changeDigits : changeDigits.slice(-10);
+        const firstDigit = phone.charAt(0);
+        if (["6", "7", "8", "9"].includes(firstDigit)) {
+          console.log(`   ✅ IMPROVED: Using provided phone: ${phone}`);
+          callData.callerPhone = phone;
+          callData.partialPhoneNo = "";
+          callData.step = "ask_complaint";
+          callData.retries = 0;
+          const readable = `${phone.slice(0, 5)} ${phone.slice(5)}`;
+          ask(twiml, `Theek hai. Number ${readable} se complaint save kar denge. Ab batayein — machine mein kya taklif hai?`);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
         }
@@ -3291,12 +3341,34 @@ router.post("/process", async (req, res) => {
 
       // Detect "save/wahi/sahi/use this" intent — treat as confirming existing number
       const isSaveIntent =
-        /\b(save|sev|wahi|wahin|usi|same|sahi|theek|haan|use|rakh|rakho|yahi|isko)\b/i.test(
+        /\b(save|sev|wahi|wahin|usi|same|sahi|theek|use|rakh|rakho|yahi|isko)\b/i.test(
           rawSpeech,
-        ) && !/^\d/.test(rawSpeech.trim());
+        ) && !/^\d/.test(rawSpeech.trim()) && !changeIntent.test(rawSpeech);
       
       // Also check colloquial affirmatives like "haa haa bhai", "bilkul bilkul"
       const isColloquialAffirmative = colloquialAffirmatives.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      
+      // NEW: Better handling for "हाँ बदलना है" (yes want to change) without phone — ask for it
+      const wantsChangeWithoutPhone = /\b(change|badal|haan|ha|yes|bilkul)\b/i.test(rawSpeech) && changeDigits.length === 0 && isChangingPhone === false;
+      if (wantsChangeWithoutPhone && knownPhone) {
+        console.log(`   📱 IMPROVED: Customer said YES to change but no phone provided`);
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 5) {
+          // After 5 retries on phone change, use known phone
+          console.log(`   ⚠️ Max retries on phone change reached, using known phone`);
+          callData.callerPhone = knownPhone;
+          callData.partialPhoneNo = "";
+          callData.step = "ask_complaint";
+          callData.retries = 0;
+          ask(twiml, "Achha ab batayein! Machine mein kya taklif hai?");
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
+        callData.lastQuestion = "Theek hai. Apna naya phone number boliye — 10 digits.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
       // If customer confirms existing number (affirmative OR save-intent OR colloquial)
       if (
@@ -3310,7 +3382,7 @@ router.post("/process", async (req, res) => {
         callData.step = "ask_complaint";
         callData.retries = 0;
         callData.lastQuestion =
-          "Achha ab btayein! Machine mein kya taklif hai?";
+          "Achha ab batayein! Machine mein kya taklif hai?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3354,7 +3426,19 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         } else {
           console.log(`   ❌ VALIDATION FAILED: Invalid prefix ${firstDigit}`);
-          ask(twiml, "Yeh number sahi nahi — 6, 7, 8 ya 9 se start hona chahiye.");
+          callData.retries = (callData.retries || 0) + 1;
+          if (callData.retries >= 5) {
+            // After 5 retries with invalid prefix, use known phone
+            console.log(`   ⚠️ Max retries on invalid prefix reached, using known phone`);
+            callData.callerPhone = knownPhone || "Unknown";
+            callData.partialPhoneNo = "";
+            callData.step = "ask_complaint";
+            callData.retries = 0;
+            ask(twiml, "Theek hai. Ab machine ki taklif batayein.");
+            activeCalls.set(CallSid, callData);
+            return res.type("text/xml").send(twiml.toString());
+          }
+          ask(twiml, `Yeh number ${firstDigit} se start ho raha hai. 6, 7, 8 ya 9 se boliye — dobara se start kariye.`);
           callData.partialPhoneNo = "";
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
@@ -3370,7 +3454,9 @@ router.post("/process", async (req, res) => {
       // No usable digits yet
       if (accumulated.length === 0) {
         callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
+        if (callData.retries >= 5) {
+          // After 5 retries on phone entry, move forward (INCREASED FROM 3 TO 5)
+          console.log(`   ⚠️ Max 5 retries on phone entry reached, moving forward with known phone or default`);
           callData.callerPhone = knownPhone || "Unknown";
           callData.partialPhoneNo = "";
           callData.step = "ask_complaint";
@@ -3382,8 +3468,8 @@ router.post("/process", async (req, res) => {
         }
         callData.lastQuestion =
           knownPhone && knownPhone !== "Unknown"
-            ? `Humhare paas number ${knownPhone.split("").join(" ")} hai. Kya yeh sahi hai?`
-            : "Apna mobile number boliye, ek ek digit mein.";
+            ? `Humhare paas number ${knownPhone.split("").join(" ")} hai. Kya yeh sahi hai ya badalna hai?`
+            : "Apna mobile number boliye — 10 digits.";
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3621,7 +3707,10 @@ router.post("/process", async (req, res) => {
        STEP 7: CLARIFY COMPLAINT
        Ask customer if they want to FULLY explain their complaint
        If YES → go to explain_complaint (capture all details)
-       If NO → direct save (final_confirmation)
+       If NO (or "just save this") → direct save (final_confirmation)
+       
+       IMPORTANT: Recognize phrases like "बस यही save karlo" = "just save this" = NO
+       Then take LAST word for definitive answer (नहीं=NO, not first haa=YES)
     ────────────────────────────────────────────────────── */
     if (callData.step === "clarify_complaint") {
       // ── Conversational Intelligence Handler ──
@@ -3636,9 +3725,46 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
+      // BUG FIX: First check for "just save this" phrases (meaning NO to explain)
+      const justSaveKeywords = [
+        "बस यही",          // bas yehi = just this
+        "बस इतना",         // bas itna = just this much
+        "बस से",           // bas se = just from/this
+        "डिटेल से",        // detail se = with these details
+        "save kar do",      // save this
+        "सेव कर दो",       // save kar do
+        "दर्ज कर दो",       // darz kar do (file it)
+        "बस दर्ज",         // bas darz = just file
+        "just save",        // just save
+        "इसी से काफी",     // this is enough
+      ];
+      
+      const isJustSaveIntent = justSaveKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (isJustSaveIntent) {
+        console.log(`   ✅ CLARIFY: "Just save this" phrase detected → direct save`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        // NO summary question - just auto-submit
+        console.log(`   📤 PROCEEDING: Auto-submit without question`);
+        await _submitAndClose(twiml, callData, CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Extract LAST word for definitive yes/no answer (e.g. "हां हां नहीं" → नहीं is last)
+      const words = rawSpeech.trim().split(/\s+/).filter(w => w.length > 0);
+      const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase() : "";
+      console.log(`   📝 CLARIFY: Full speech: "${rawSpeech}" | Last word: "${lastWord}"`);
+
+      // Check LAST word for negative intent
+      const negativeLastWords = ["नहीं", "नही", "ना", "न", "nahi", "na", "no", "not"];
+      const affirmativeLastWords = ["हा", "हा", "हाँ", "हान", "जी", "bilkul", "बिल्कुल", "yes", "haan"];
+      
+      const isLastWordNegative = negativeLastWords.some(w => lastWord.includes(w));
+      const isLastWordAffirmative = affirmativeLastWords.some(w => lastWord.includes(w));
+
       // Customer WANTS to explain fully — go to explain_complaint step
-      if (isAffirmative(rawSpeech)) {
-        console.log(`   ✅ Customer wants to explain complaint fully`);
+      if (isLastWordAffirmative && !isLastWordNegative) {
+        console.log(`   ✅ CLARIFY: Last word is AFFIRMATIVE → explain complaint`);
         callData.step = "explain_complaint";
         callData.retries = 0;
         callData.complaintExplanation = ""; // Initialize explanation buffer
@@ -3649,13 +3775,13 @@ router.post("/process", async (req, res) => {
       }
 
       // Customer does NOT want to explain — direct save
-      if (isNegative(rawSpeech)) {
-        console.log(`   ✅ Customer does NOT want to fully explain — direct save`);
+      if (isLastWordNegative) {
+        console.log(`   ✅ CLARIFY: Last word is NEGATIVE → direct save`);
         callData.step = "final_confirmation";
         callData.retries = 0;
-        callData.lastQuestion = _buildSummary(callData);
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
+        // NO summary question - just auto-submit
+        console.log(`   📤 PROCEEDING: Auto-submit without question`);
+        await _submitAndClose(twiml, callData, CallSid);
         return res.type("text/xml").send(twiml.toString());
       }
 
@@ -3663,12 +3789,12 @@ router.post("/process", async (req, res) => {
       callData.retries = (callData.retries || 0) + 1;
       if (callData.retries >= 2) {
         // Default to direct save if confused
-        console.log(`   ⚠️ Unclear response, defaulting to direct save`);
+        console.log(`   ⚠️ CLARIFY: Unclear response after ${callData.retries} retries, defaulting to direct save`);
         callData.step = "final_confirmation";
         callData.retries = 0;
-        callData.lastQuestion = _buildSummary(callData);
-        ask(twiml, callData.lastQuestion);
-        activeCalls.set(CallSid, callData);
+        // NO summary question - just auto-submit
+        console.log(`   📤 PROCEEDING: Auto-submit without question`);
+        await _submitAndClose(twiml, callData, CallSid);
         return res.type("text/xml").send(twiml.toString());
       }
       ask(twiml, "Haan boliye ya nahi — apni complaint puri tarah samjhana chahte hain?");
@@ -3710,6 +3836,42 @@ router.post("/process", async (req, res) => {
         ask(twiml, "Bilkul, main sun raha hoon. Aur details batayein.");
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
+      }
+
+      // BUG FIX: Detect complaint cancellation keywords
+      const complaintCancellationKeywords = [
+        "रजिस्टर नहीं",
+        "कंप्लेंट नहीं",
+        "शिकायत नहीं",
+        "दर्ज नहीं",
+        "complaint nahi",
+        "register nahi",
+        "don't register",
+        "cancel",
+        "रजिस्ट्रेशन नहीं",
+      ];
+      
+      const isCancellingComplaint = complaintCancellationKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (isCancellingComplaint && rawSpeech.toLowerCase().includes("नहीं")) {
+        console.log(`   🛑 COMPLAINT CANCELLATION: Customer does NOT want to register complaint`);
+        const twiml2 = new VoiceResponse();
+        twiml2.say(
+          { voice: "Polly.Aditi", language: "hi-IN" },
+          "Theek hai sir. Koi baat nahi. Agar baad mein complaint darz karni ho to hume call kar dena. Dhanyavaad.",
+        );
+        const gatherEnd = twiml2.gather({
+          input: "dtmf",
+          numDigits: 1,
+          timeout: 3,
+          action: "/voice",
+          method: "POST",
+        });
+        gatherEnd.say(
+          { voice: "Polly.Aditi", language: "hi-IN" },
+          "Aapki call disconnect ho rahi hai. Shukriya!",
+        );
+        activeCalls.delete(CallSid);
+        return res.type("text/xml").send(twiml2.toString());
       }
 
       // Append explanation to buffer
