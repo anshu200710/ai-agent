@@ -516,6 +516,110 @@ function extractPhoneDigits(text) {
   return digits;
 }
 
+
+
+/* ======================= HINDI → ROMAN TRANSLITERATION ======================= */
+/**
+ * transliterateHindi — converts Devanagari script to Roman/English characters.
+ * Handles consonants, matras, standalone vowels, anusvara, visarga, halant.
+ * Non-Devanagari characters (ASCII, digits, punctuation) pass through unchanged.
+ * Used for complaint_details before API submission.
+ */
+function transliterateHindi(text) {
+  if (!text) return text;
+
+  // ── Standalone vowels (when not preceded by a consonant) ──
+  const standaloneVowels = {
+    'अ': 'a',  'आ': 'aa', 'इ': 'i',  'ई': 'ee', 'उ': 'u',  'ऊ': 'oo',
+    'ऋ': 'ri', 'ए': 'e',  'ऐ': 'ai', 'ओ': 'o',  'औ': 'au', 'अं': 'an',
+    'अः': 'ah',
+  };
+
+  // ── Consonants (inherent 'a' added unless followed by halant ् or matra) ──
+  const consonants = {
+    'क': 'k',  'ख': 'kh', 'ग': 'g',  'घ': 'gh', 'ङ': 'ng',
+    'च': 'ch', 'छ': 'chh','ज': 'j',  'झ': 'jh', 'ञ': 'ny',
+    'ट': 't',  'ठ': 'th', 'ड': 'd',  'ढ': 'dh', 'ण': 'n',
+    'त': 't',  'थ': 'th', 'द': 'd',  'ध': 'dh', 'न': 'n',
+    'प': 'p',  'फ': 'ph', 'ब': 'b',  'भ': 'bh', 'म': 'm',
+    'य': 'y',  'र': 'r',  'ल': 'l',  'व': 'v',
+    'श': 'sh', 'ष': 'sh', 'स': 's',  'ह': 'h',
+    'ळ': 'l',  'क्ष': 'ksh', 'त्र': 'tr', 'ज्ञ': 'gya',
+    // Common conjuncts
+    'ड़': 'r',  'ढ़': 'rh',
+  };
+
+  // ── Matras (vowel signs attached to consonants) ──
+  const matras = {
+    'ा': 'a',  'ि': 'i',  'ी': 'ee', 'ु': 'u',  'ू': 'oo',
+    'ृ': 'ri', 'े': 'e',  'ै': 'ai', 'ो': 'o',  'ौ': 'au',
+    'ं': 'n',  'ँ': 'n',  'ः': 'h',
+    '्': '',   // halant — suppress inherent 'a'
+    'ऑ': 'o',  'ॉ': 'o',
+  };
+
+  const chars = [...text]; // Handle multi-code-point chars (important for Devanagari)
+  let result = '';
+  let i = 0;
+
+  while (i < chars.length) {
+    const ch = chars[i];
+    const next = chars[i + 1] || '';
+
+    // ── Check multi-char conjuncts first ──
+    const twoChar = ch + next;
+    if (consonants[twoChar]) {
+      result += consonants[twoChar];
+      i += 2;
+      // Check if followed by a matra or halant
+      const afterTwo = chars[i] || '';
+      if (matras[afterTwo] !== undefined) {
+        result += matras[afterTwo];
+        i++;
+      } else if (afterTwo && !consonants[afterTwo] && !standaloneVowels[afterTwo]) {
+        result += 'a'; // inherent vowel
+      }
+      continue;
+    }
+
+    // ── Standalone vowel ──
+    if (standaloneVowels[ch]) {
+      result += standaloneVowels[ch];
+      i++;
+      continue;
+    }
+
+    // ── Consonant ──
+    if (consonants[ch]) {
+      result += consonants[ch];
+      i++;
+      // Look ahead for matra or halant
+      const matra = chars[i] || '';
+      if (matras[matra] !== undefined) {
+        result += matras[matra]; // includes '' for halant (suppresses 'a')
+        i++;
+      } else if (!matra || (!consonants[matra] && !standaloneVowels[matra])) {
+        result += 'a'; // inherent 'a' at word boundary or non-Devanagari char
+      }
+      // If next is also a consonant, no inherent vowel (halant implied between conjuncts)
+      continue;
+    }
+
+    // ── Matra without preceding consonant (shouldn't normally happen) ──
+    if (matras[ch] !== undefined) {
+      result += matras[ch];
+      i++;
+      continue;
+    }
+
+    // ── Non-Devanagari: pass through as-is (ASCII, digits, pipe, space, etc.) ──
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
 /* ======================= KEYWORDS ======================= */
 const affirmativeKeywords = [
   // Hindi — Simple & clear affirmations
@@ -2718,7 +2822,7 @@ async function saveComplaint(callData) {
       job_location: callData.jobLocation || "Onsite",
       branch: branch,
       outlet: outlet,
-      complaint_details: callData.rawComplaint || "Not provided",
+      complaint_details: transliterateHindi(callData.rawComplaint || "Not provided"),
       complaint_title: allTitles,
       sub_title: allSubTitles,
       business_partner_code: customer.businessPartnerCode || "NA",
