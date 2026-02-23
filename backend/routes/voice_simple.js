@@ -1982,6 +1982,74 @@ const complaintMap = {
       "Light Problem": ["headlight", "dark", "अंधेरा"]
     }
   },
+  "Oil Service": {
+    keywords: [
+      "oil",
+      "service",
+      "सर्विस",
+      "सर्विस की जरूरत",
+      "सर्विस चाहिए",
+      "सर्वि",
+      "oil change",
+      "तेल",
+      "ऑयल",
+      "तेल बदलना",
+      "oil badalna",
+      "maintenance",
+      "maintenance service",
+      "रखरखाव",
+      "रखरखाव सेवा",
+      "indian oil",
+      "इंडियन ऑयल",
+      "inspection",
+      "machine check",
+      "general service",
+      "servicing",
+      "regular service",
+      "checkup",
+      "ब्रेकडाउन सर्विस",
+      "emergency service",
+      "तेल की जांच",
+      "oil check",
+      "maintenance due",
+      "service due",
+    ],
+    priority: 8,
+    subTitles: {
+      "Oil Change": [
+        "oil change",
+        "तेल बदलना",
+        "oil badalna",
+        "engine oil",
+        "इंजन ऑयल",
+        "naya tel",
+      ],
+      "Routine Maintenance": [
+        "maintenance",
+        "check",
+        "inspection",
+        "regular service",
+        "checkup",
+        "जांच",
+        "रखरखाव",
+      ],
+      "Filter Replacement": [
+        "filter",
+        "फिल्टर",
+        "oil filter",
+        "air filter",
+        "fuel filter",
+        "फिल्टर बदलना",
+      ],
+      "General Service": [
+        "service",
+        "general service",
+        "basic service",
+        "सर्विस",
+        "आधारभूत सेवा",
+      ],
+    },
+  },
   "General Problem": {
     keywords: [
       "problem",
@@ -3008,8 +3076,17 @@ router.post("/process", async (req, res) => {
 
       // Ambiguous (e.g. "आप मेरी मशीन है?" — question-form, not yes/no)
       callData.retries = (callData.retries || 0) + 1;
-      if (callData.retries >= 2) {
-        // Assume correct and move on — don't keep customer waiting
+      if (callData.retries >= 3) {
+        // FIXED: After 3 unclear responses, ask clearer yes/no question instead of assuming
+        console.log(`   ⚠️ CONFIRM_CUSTOMER: Ambiguous responses after retries, asking clearer question`);
+        callData.lastQuestion = `Bilkul clear samajh nahi aaya. Bas haan ya nahi boliye — "${name}" ka machine hai ya nahi?`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      if (callData.retries >= 5) {
+        // FIXED: After 5 retries, give up and move forward
+        console.log(`   ⚠️ CONFIRM_CUSTOMER: Max retries reached, proceeding to ask_city`);
         callData.step = "ask_city";
         callData.retries = 0;
         callData.lastQuestion = `Theek hai ji. Aapki machine abhi kis location par hai? Kaunsa shehar ya jagah?`;
@@ -3089,11 +3166,24 @@ router.post("/process", async (req, res) => {
         console.log(`   🔍 ASK_CITY: Matched city "${rawSpeech}" → ${matchedCity.city_name}`);
         callData.machineLocation = matchedCity.city_name;
         callData.city = matchedCity.city_name;
-        callData.step = "ask_engineer_location";
+        
+        // FIX: AUTO-POPULATE engineer location from matched city - skip ask_engineer_location entirely
+        callData.engineerAddress = matchedCity.city_add;
+        callData.branch = matchedCity.branch_name;
+        callData.outlet = matchedCity.city_name;
+        callData.city_id = matchedCity.branch_code;
+        callData.lat = matchedCity.lat;
+        callData.lng = matchedCity.lng;
+        callData.sc_id = matchedCity.id;
+        callData.jobLocation = "Workshop"; // Default location
+        
+        console.log(`   ✅ AUTO-POPULATED: Branch=${callData.branch}, City=${callData.city} - SKIPPING ask_engineer_location`);
+        
+        // GO DIRECTLY TO PHONE - skip ask_engineer_location entirely
+        callData.step = "ask_phone";
         callData.retries = 0;
-        callData.lastQuestion =
-          "Engineer kahan se aayenge? Aapka registered service center kaunsa hai? Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, ya koi aur branch?";
-        ask(twiml, callData.lastQuestion);
+        callData.lastQuestion = _buildPhoneQuestion(callData);
+        askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -3101,16 +3191,18 @@ router.post("/process", async (req, res) => {
       // ❌ NO MATCH — Reject invalid city and ask again
       console.log(`   ❌ ASK_CITY: No service center match for "${rawSpeech}" — rejecting as invalid`);
       callData.retries = (callData.retries || 0) + 1;
-      if (callData.retries >= 3) {
-        // After 3 retries, use customer's registered city
+      if (callData.retries >= 5) {
+        // FIXED: After 5 retries (increased from 3), use customer's registered city
         const fallbackCity = callData.customerData?.city || "Not Provided";
         callData.machineLocation = fallbackCity;
         callData.city = fallbackCity;
-        console.log(`   📝 ASK_CITY: Using fallback city: ${fallbackCity}`);
+        console.log(`   📝 ASK_CITY: Using fallback city after 5 retries: ${fallbackCity}`);
+        
+        // FIXED: Ask confirmation before moving to next step
         callData.step = "ask_engineer_location";
         callData.retries = 0;
         callData.lastQuestion =
-          "Engineer kahan se aayenge — aapka registered service center kaunsa hai?";
+          `Theek hai. ${fallbackCity} mein aapka machine hai, sahi? Ab engineer service center select kar denge.`;
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3179,7 +3271,7 @@ router.post("/process", async (req, res) => {
         }
         ask(
           twiml,
-          "Engineer kis jagah se aayenge — Jaipur, Kota, Ajmer, Alwar, Sikar, Udaipur, Bhilwara?",
+          "Engineer kis jagah se aayenge?",
         );
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3403,6 +3495,33 @@ router.post("/process", async (req, res) => {
 
       // Extract phone digits (noise-filtered)
       const phoneDigits = extractPhoneDigits(rawSpeech);
+
+      // FIX 4: Check for "नहीं बदलना" (don't want to change) BEFORE plain isNegative
+      // This is a double-negative affirmation — customer wants to KEEP existing phone
+      const keepPhrasesHindi = [
+        "नहीं बदलना",
+        "nahi badalna",
+        "nahi change",
+        "change nahi",
+        "wahi rakhna",
+        "same rakhna",
+        "nahi chahiye change",
+        "yahi theek hai",
+        "yahi sahi hai",
+      ];
+      const isKeepingPhone = keepPhrasesHindi.some((p) => rawSpeech.toLowerCase().includes(p.toLowerCase()));
+      if (isKeepingPhone && knownPhone && knownPhone !== "Unknown") {
+        console.log(`   📞 FIX 4: Customer says "नहीं बदलना" → KEEPING existing phone: ${knownPhone}`);
+        callData.callerPhone = knownPhone;
+        callData.partialPhoneNo = "";
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        const readable = `${knownPhone.slice(0, 5)} ${knownPhone.slice(5)}`;
+        ask(twiml, `Theek hai bhai. Number ${readable} se complaint save karenge. Ab batayein — machine mein kya problem hai?`);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       console.log(
         `   📱 Extracted phone digits: "${phoneDigits}" | Buffer: "${callData.partialPhoneNo}"`,
       );
@@ -3478,6 +3597,15 @@ router.post("/process", async (req, res) => {
       // Digits accumulating but not complete yet
       if (accumulated.length > 0 && accumulated.length < 9) {
         const readable = accumulated.split("").join(" ");
+        callData.retries = (callData.retries || 0) + 1;
+        if (callData.retries >= 5) {
+          // FIXED: After 5 retries on incomplete phone, use it or move forward
+          console.log(`   ⚠️ ASK_PHONE: Max retries on incomplete phone (${accumulated.length} digits), asking to confirm or re-enter`);
+          callData.lastQuestion = `Bas ${accumulated.length} digits mile. Pura 10 digit number chahiye ya registered phone se kaam chala le?`;
+          askNumber(twiml, callData.lastQuestion);
+          activeCalls.set(CallSid, callData);
+          return res.type("text/xml").send(twiml.toString());
+        }
         callData.lastQuestion = `${readable} aaya — baaki boliye.`;
         askNumber(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
@@ -3586,7 +3714,9 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
       callData.retries = (callData.retries || 0) + 1;
-      if (callData.retries >= 3) {
+      if (callData.retries >= 5) {
+        // FIXED: After 5 retries, use known phone or move forward explicitly
+        console.log(`   ⚠️ CONFIRM_PHONE: Max retries reached, using known phone`);
         callData.step = "ask_complaint";
         callData.retries = 0;
         callData.lastQuestion =
@@ -3636,10 +3766,10 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
         const nudges = [
-          "Machine mein kya taklif hai? Engine, brake, hydraulic, AC — jo bhi problem ho, batayein.",
-          "Zara detail mein batayein — machine kya kar rahi hai?",
-          "Chalu nahi ho rahi? Awaaz aa rahi? Koi aur dikkat?",
-          "Kaunsa hissa theek nahi hai?",
+          "Machine mein kya taklif hai? Engine kharab? Hydraulic slow? Brake nahi ruk rahi? Jo bhi problem ho, boliye.",
+          "Saaf boliye bhai — machine kya kar rahi hai? Chalu nahi ho rahi? Shoru nahi ho rahi? Awaaz aa rahi?",
+          "Kaunsa hissa kharab hai? Engine? Tyre? Pumpka? Naam le kar boliye kya problem hai.",
+          "Detail mein batayein — machine kya nahi kar rahi? Ya ghatiya performance de rahi hai?",
         ];
         ask(twiml, nudges[Math.min(callData.retries - 1, nudges.length - 1)]);
         activeCalls.set(CallSid, callData);
@@ -3679,7 +3809,7 @@ router.post("/process", async (req, res) => {
           return res.type("text/xml").send(twiml.toString());
         }
         callData.lastQuestion =
-          "Kaunsa hissa theek nahi hai?";
+          "Kaunsa hissa problem hai? Phir se boliye.";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
@@ -3690,14 +3820,88 @@ router.post("/process", async (req, res) => {
       callData.complaintTitle = allDetected[0].complaint;
       callData.complaintSubTitle = allDetected[0].subTitle;
       callData.retries = 0;
-      callData.step = "clarify_complaint";
-
-      // Move to clarification step to ask if customer wants to FULLY explain their complaint
+      
+      // ✅ NEW STEP: Ask if customer has more complaints before moving to clarification
+      // Instead of "explain", ask: "Kya aur bhi complaint hai?" in very simple rural Hindi
       console.log(
-        `   ✅ Detected ${allDetected.length} complaint(s) — asking if customer wants to fully explain`,
+        `   ✅ Detected ${allDetected.length} complaint(s) — asking if customer has more complaints`,
       );
       const complaintNames = _buildComplaintReadback(allDetected);
-      callData.lastQuestion = `Maine aapki machine ke ${complaintNames} complaint samjh gaya. Ab kya aap apni problem ko puri tarah samjhana chahte hain ya main bas itne hi complaint details save kar du?`;
+      
+      // IMPORTANT: Ask in VERY simple rural-friendly Hindi
+      callData.lastQuestion = `Theek hai ji. Maine samjha ki aapke machine mein ${complaintNames} ka problem hai. \nAb boliye — aur bhi koi aur problem hai ya bas itni hi problem save kar du?`;
+      
+      // Set a temporary step to check if more complaints
+      callData.step = "ask_more_complaints";
+      ask(twiml, callData.lastQuestion);
+      activeCalls.set(CallSid, callData);
+      return res.type("text/xml").send(twiml.toString());
+    }
+
+    /* ──────────────────────────────────────────────────────
+       STEP 6a: ASK MORE COMPLAINTS
+       After detecting initial complaints, ask if customer has more
+       YES (affirmative) → stay in ask_complaint to accept more
+       NO (negative) → move to clarify_complaint
+       UNCLEAR → ask again
+    ────────────────────────────────────────────────────── */
+    if (callData.step === "ask_more_complaints") {
+      // ── Conversational Intelligence Handler ──
+      const ci = handleConversationalIntent(rawSpeech, callData);
+      if (ci.handled) {
+        if (ci.intent !== INTENT.WAIT && ci.intent !== INTENT.CHECKING) {
+          callData.retries = (callData.retries || 0) + 1;
+        }
+        ask(twiml, ci.response);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+      // ── End CI Handler ──
+
+      // Check if customer wants to ADD MORE complaints or SAVE and FINISH
+      if (isAffirmative(rawSpeech)) {
+        // Customer wants to ADD MORE complaints
+        console.log(`   ✅ ASK_MORE_COMPLAINTS: Customer YES → collect more complaints`);
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        callData.lastQuestion = `Acha. Aur bhi kaunsi problem hai? Boliye.`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      if (isNegative(rawSpeech)) {
+        // Customer wants to SAVE AND FINISH
+        console.log(`   ✅ ASK_MORE_COMPLAINTS: Customer NO → proceed to save`);
+        callData.step = "clarify_complaint";
+        callData.retries = 0;
+        
+        const complaintNames = _buildComplaintReadback(callData.allComplaints);
+        callData.lastQuestion = `Theek hai. Problem samajh gaya — ${complaintNames}. Ab aur detail batana hai? Ya bas register kar du?`;
+        
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // UNCLEAR RESPONSE - ask again
+      callData.retries = (callData.retries || 0) + 1;
+      if (callData.retries >= 3) {
+        // After 3 unclear responses, assume NO (just save)
+        console.log(`   ⚠️ ASK_MORE_COMPLAINTS: Max retries, assuming NO more complaints`);
+        callData.step = "clarify_complaint";
+        callData.retries = 0;
+        
+        const complaintNames = _buildComplaintReadback(callData.allComplaints);
+        callData.lastQuestion = `Theek hai. Problem samajh gaya — ${complaintNames}. Ab aur detail batana hai? Ya bas register kar du?`;
+        
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // Ask more clearly in simple rural hindi
+      callData.lastQuestion = `Bas - haan boliye ya nahi — aur bhi problem hai?`;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
@@ -3724,6 +3928,20 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
       // ── End CI Handler ──
+
+      // FIX 5: If customer is already explaining (long answer with complaints), capture it directly
+      const hasComplaintContent = detectAllComplaints(rawSpeech).length > 0 || rawSpeech.length > 30;
+      if (hasComplaintContent) {
+        console.log(`   ✅ FIX 5: Customer already explaining (${rawSpeech.length} chars) → capture and continue`);
+        callData.step = "explain_complaint";
+        callData.complaintExplanation = rawSpeech;
+        callData.rawComplaint = callData.rawComplaint + " | " + rawSpeech;
+        callData.retries = 0;
+        callData.lastQuestion = "Theek hai. Aur bhi kuch hai machine ke baare mein? Ya bas itna hi?";
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
       // BUG FIX: First check for "just save this" phrases (meaning NO to explain)
       const justSaveKeywords = [
@@ -3823,12 +4041,10 @@ router.post("/process", async (req, res) => {
       // Capture explanation details
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
-        if (callData.retries >= 3) {
-          // After 3 no-response attempts, proceed to save
-          console.log(`   ⚠️ EXPLAIN_COMPLAINT: No clear explanation after ${callData.retries} retries, proceeding to save`);
-          callData.step = "final_confirmation";
-          callData.retries = 0;
-          callData.lastQuestion = _buildSummary(callData);
+        if (callData.retries >= 2) {
+          // FIXED: After 2 no-response attempts, ask if customer wants to finish explaining
+          console.log(`   ⚠️ EXPLAIN_COMPLAINT: No clear details after ${callData.retries} retries, asking to confirm completion`);
+          callData.lastQuestion = "Theek hai. Kya aap apni explanation poori kar chuke hain, ya aur bhi kuch bolna hai?";
           ask(twiml, callData.lastQuestion);
           activeCalls.set(CallSid, callData);
           return res.type("text/xml").send(twiml.toString());
@@ -3896,10 +4112,15 @@ router.post("/process", async (req, res) => {
         "bas yehi hai",
       ];
       
-      const isDoneExplaining = doneExplainingKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase())) 
-        || isNegative(rawSpeech.replace(/^(और|aur|kya|या|or)\s+/i, "")); // Exclude negations from follow-up questions
+      const isDoneExplaining = doneExplainingKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
       
-      if (isDoneExplaining) {
+      // FIX 6: Only treat standalone short "नहीं" as done — not embedded in complaints like "start नहीं हो रहा"
+      const isShortStandaloneNo = 
+        rawSpeech.trim().split(/\s+/).length <= 3 && isNegative(rawSpeech);
+      
+      const shouldFinishExplaining = isDoneExplaining || isShortStandaloneNo;
+      
+      if (shouldFinishExplaining) {
         console.log(`   ✅ EXPLAIN_COMPLAINT: Customer finished explaining - proceeding to save`);
         // Append full explanation to rawComplaint
         callData.rawComplaint = callData.rawComplaint + " [DETAILED EXPLANATION: " + callData.complaintExplanation + "]";
@@ -3913,7 +4134,8 @@ router.post("/process", async (req, res) => {
 
       // Customer continuing to explain — ask if they have more details
       callData.retries = 0;
-      callData.lastQuestion = "Theek hai. Aur bhi keucho hai ji? Ya bas itna hi?";
+      callData.lastQuestion = "Theek hai. Aur kuch batana hai machine ke baare mein? Ya bas itna hi save kar dun?"
+;
       ask(twiml, callData.lastQuestion);
       activeCalls.set(CallSid, callData);
       return res.type("text/xml").send(twiml.toString());
