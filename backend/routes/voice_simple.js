@@ -15,12 +15,10 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL =
-  "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
-// const EXTERNAL_API_BASE = "http://192.168.1.36/jcbServiceEnginerAPIv7";
-// const COMPLAINT_API_URL =
-//   "http://192.168.1.36/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+// const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://192.168.1.6/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://192.168.1.6/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -762,6 +760,39 @@ const affirmativeKeywords = [
   "my name",
 ];
 
+/* ======================= BUG FIX #1: PROXY CALLER PATTERNS ======================= */
+const PROXY_CALLER_PATTERNS = [
+  "मेरे मालिक की", "mere malik ki", "mere malik ka",
+  "मेरे साहब की", "mere sahab ki", "mere sahab ka",
+  "मेरे बॉस की", "mere boss ki",
+  "मेरे मालिकिन की", "मेरी कंपनी की",
+  "owner ki", "owner ka",
+  "मालिक की मशीन", "साहब की मशीन",
+  "प्रजापति जी की", "जी की है",
+  "हमारी कंपनी की", "hamari company ki",
+  "hamara malik", "मेरे मालिक",
+  "हमारे मालिक", "humare malik",
+  "मालिक की है", "malik ki hai",
+  "मालिक का है", "malik ka hai",
+  "जिनकी मशीन", "jinki machine",
+  "उनकी मशीन", "unki machine",
+  "किसी और की", "kisi aur ki"
+];
+
+/* ======================= BUG FIX #5: REFUSAL-TO-EXPLAIN PATTERNS ======================= */
+const EXPLANATION_REFUSAL_PATTERNS = [
+  "कुछ नहीं बताना", "kuch nahi batana",
+  "बताना नहीं है", "batana nahi hai",
+  "नहीं बताऊंगा", "nahi bataunga",
+  "नहीं बोलूंगा", "nahi bolunga",
+  "बस भेज दो", "bas bhej do",
+  "इंजीनियर भेजो", "engineer bhejo", "engineer bhejiye",
+  "आदमी भेजो", "aadmi bhejo",
+  "mechanic bhejo", "mechanic bhejiye",
+  "कोई नहीं", "koi nahi",
+  "आ जाओ", "aa jao", "aa jao bas"
+];
+
 const negativeKeywords = [
   // Hindi — Simple negations
   "नहीं",
@@ -1270,6 +1301,32 @@ const jobLocationKeywords = {
   ],
 };
 
+/* ======================= BUG FIX #7: CLEAN COMPLAINT DETAILS =======================*/
+function cleanComplaintDetails(rawComplaint) {
+  if (!rawComplaint) return "Not provided";
+  const NOISE_PHRASES_TO_REMOVE = [
+    /kuch(ha)?\s+nahi\s+batana/gi,
+    /कुछ नहीं बताना/g,
+    /batana nahi hai/gi,
+    /nahi bataunga/gi,
+    /engineer bhejiye/gi,
+    /इंजीनियर भेजिए/g,
+    /bas bhejiye/gi,
+    // /\[DETAILED EXPLANATION:\s*/g,
+    /\]$/g,
+    /^\s*\|\s*/g,
+    /\|\s*$/g,
+    /\|\s*\|/g,
+  ];
+  let cleaned = rawComplaint;
+  for (const pattern of NOISE_PHRASES_TO_REMOVE) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+  const segments = cleaned.split("|").map(s => s.trim()).filter(s => s.length > 3);
+  const unique = [...new Set(segments)];
+  return unique.join(" | ") || "Not provided";
+}
+
 /* ======================= COMPREHENSIVE COMPLAINT MAP ======================= */
 const complaintMap = {
   Engine: {
@@ -1308,18 +1365,6 @@ const complaintMap = {
     ],
     priority: 10,
     subTitles: {
-      "Start Problem": [
-        "start",
-        "स्टार्ट नहीं",
-        "शुरू नहीं",
-        "chalu nahi",
-        "चालू नहीं",
-        "starter",
-        "cranking",
-        "बंद है",
-        "मर गया",
-        "डेड",
-      ],
       Overheating: [
         "overheat",
         "गर्म",
@@ -1399,6 +1444,7 @@ const complaintMap = {
     keywords: [
       // Hindi
       "स्टार्ट नहीं",
+      "चल नहीं",
       "चालू नहीं",
       "शुरू नहीं",
       "बंद है",
@@ -3006,12 +3052,15 @@ async function submitComplaintToExternal(complaintData) {
       };
     }
 
+    // BUG FIX #6: Use job_id as fallback when SAP ID is null
     const sapId =
       response.data.data?.complaint_sap_id ||
       response.data.data?.sap_id ||
       null;
-    console.log("✅ Submitted. SAP ID:", sapId);
-    return { success: true, data: response.data, sapId };
+    const jobId = response.data.data?.job_id || null;
+    const referenceId = sapId || (jobId ? `J${jobId}` : null);
+    console.log("✅ Submitted. SAP ID:", sapId, "| Job ID:", jobId, "| Reference ID:", referenceId);
+    return { success: true, data: response.data, sapId, jobId, referenceId };
   } catch (e) {
     console.error("❌ Submit Error:", e.message);
     return { success: false, error: e.message };
@@ -3075,7 +3124,7 @@ async function saveComplaint(callData) {
       job_location: callData.jobLocation || "Onsite",
       branch: branch,
       outlet: outlet,
-      complaint_details: transliterateHindi(callData.rawComplaint || "Not provided"),
+      complaint_details: transliterateHindi(cleanComplaintDetails(callData.rawComplaint || "Not provided")),
       complaint_title: allTitles,
       sub_title: allSubTitles,
       business_partner_code: customer.businessPartnerCode || "NA",
@@ -3410,11 +3459,52 @@ router.post("/process", async (req, res) => {
       const name = callData.customerData?.name || "";
       const city = callData.customerData?.city || "";
 
+      // BUG FIX: Explicitly check for "NOT my machine" responses FIRST
+      const notMyMachineKeywords = [
+        "नहीं मेरी मशीन",     // nahi meri machine
+        "मेरी मशीन नहीं",     // meri machine nahi
+        "ye meri machine nahi hai", // this is not my machine (Roman)
+        "ye meri machine nhi hai",  // (alternate spelling)
+        "meri machine nhi hai",     // my machine is not this
+        "machine meri nhi hai",     // machine is not mine
+        "मेरी मशीन नहीं है",   // meri machine nahi hai (full)
+        "ये मेरी मशीन नहीं",   // ye meri machine nahi
+        "ये नहीं है",         // ye nahi hai = this is not it
+        "ये मेरी नहीं है",     // ye meri nhi hai = this is not mine
+        "यह मेरी नहीं है",     // yah meri nhi hai = this is not mine
+        "नहीं है ये",         // nahi hai ye = this is not
+      ];
+      const isNotMyMachine = notMyMachineKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (isNotMyMachine) {
+        console.log(`   ✅ CONFIRM_CUSTOMER: "NOT my machine" detected → go back to ask machine number`);
+        callData.step = "ask_machine_no";
+        callData.retries = 0;
+        callData.partialMachineNo = "";
+        callData.machineNoFreshStart = true;
+        callData.lastQuestion = "Theek hai, sahi number dobara boliye.";
+        askNumber(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       if (isAffirmative(rawSpeech)) {
         callData.step = "ask_city";
         callData.retries = 0;
         callData.lastQuestion = `Achha thik hai! Aapki machine abhi kis jagah par hai? Jis shehar ya gaon mein aapka machine abhi khara hai?`;
         ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // BUG FIX #1: Check for proxy caller (calling on behalf of owner)
+      const isProxyCaller = PROXY_CALLER_PATTERNS.some((pattern) => 
+        rawSpeech.toLowerCase().includes(pattern.toLowerCase())
+      );
+      if (isProxyCaller) {
+        console.log(`   ⚠️ CONFIRM_CUSTOMER: Proxy caller detected (calling on behalf of owner) → skip machine confirmation, go to ask_city`);
+        callData.step = "ask_city";
+        callData.retries = 0;
+        ask(twiml, `Achha ji. Aapki machine abhi kis jagah par hai? Kis shehar ya gaon mein?`);
         activeCalls.set(CallSid, callData);
         return res.type("text/xml").send(twiml.toString());
       }
@@ -3713,6 +3803,34 @@ router.post("/process", async (req, res) => {
         return res.type("text/xml").send(twiml.toString());
       }
       // ── End CI Handler ──
+
+      // BUG FIX: Check if customer says SAVE keywords (सेव कर, बस सेव कर लो, etc.) → SKIP phone, go to complaints
+      const skipPhoneKeywords = [
+        "सेव कर",         // sev kar = save it
+        "सेव कर दो",      // sev kar do = save it
+        "सेव कर लो",      // sev kar lo = save it
+        "बस सेव",        // bas sev = just save
+        "save kar",       // save it (Roman)
+        "save kar do",    // save it (Roman)
+        "save kar lo",    // save it (Roman)
+        "बस सेव कर",     // bas sev kar = just save it
+        "बस सेव कर लो",  // bas sev kar lo = just save it (emphatic)
+        "बस सेव कर दो",  // bas sev kar do = just save it
+        "register kar",   // register it
+        "register karo",  // register it
+        "दर्ज कर",       // darz kar = file it
+        "बस से कर",      // bas se kar = just file it
+      ];
+      const shouldSkipPhone = skipPhoneKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (shouldSkipPhone) {
+        console.log(`   ✅ ASK_PHONE: Customer wants to SAVE (skip phone entry) → go to ask_complaint`);
+        callData.step = "ask_complaint";
+        callData.retries = 0;
+        callData.lastQuestion = `Theek hai. Ab batayein — machine mein kya taklif hai? Kaunsi problem ho rahi hai?`;
+        ask(twiml, callData.lastQuestion);
+        activeCalls.set(CallSid, callData);
+        return res.type("text/xml").send(twiml.toString());
+      }
 
       const knownPhone = callData.customerData?.phone || "";
       
@@ -4215,6 +4333,48 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
+      // BUG FIX: Check for "save complaint" keywords FIRST — many customers want to save without adding more
+      const saveComplaintKeywords = [
+        "save complaint",
+        "complaint save",
+        "सेव complaint",
+        "complaint सेव",
+        "save problem",
+        "problem save",
+        "बस save",
+        "save बस",
+        "complaint register",
+        "register complaint",
+        "problem register",
+        "register problem",
+        "complaint दर्ज",
+        "दर्ज complaint",
+        "problem दर्ज",
+        "दर्ज problem",
+        "शिकायत दर्ज",
+        "complaint बस",
+        "बस सेव",          // bas sev
+        "सेव कर",          // sev kar
+        "सेव कर दो",       // sev kar do
+        "सेव कर लो",       // sev kar lo
+        "बस से कर",       // bas se kar
+        "बस से कर दो",    // bas se kar do
+        "दर्ज कर दो",      // darz kar do
+        "दर्ज कर लो",      // darz kar lo
+        "register kar",    // register kar
+        "register karo",   // register karo
+      ];
+      const isSaveComplaintIntent = saveComplaintKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (isSaveComplaintIntent) {
+        console.log(`   ✅ ASK_MORE_COMPLAINTS: "Save complaint" intent detected → skip questions and DIRECT SUBMIT`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        // NO more questions — customer already said to save
+        console.log(`   📤 PROCEEDING: Auto-submit without asking again`);
+        await _submitAndClose(twiml, callData, CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       // Check if customer wants to ADD MORE complaints or SAVE and FINISH
       if (isAffirmative(rawSpeech)) {
         // Customer wants to ADD MORE complaints
@@ -4286,6 +4446,76 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
+      // BUG FIX: MORE ROBUST save detection — check for save intent FIRST with multiple patterns
+      const savePatternsRegex = /\b(बस|save|सेव|दर्ज|register|registr|nahi|न)\b.*\b(सेव|save|दर्ज|karo|kar|do|lo|dii|कर|लो|दो|दी)\b/gi;
+      const hasExplicitSaveKeyword = [
+        "बस सेव",
+        "सेव कर",
+        "बस करो", 
+        "सेव करो",
+        "बस सेव कर",
+        "bas sev",
+        "save kar",
+        "register kar",
+        "दर्ज कर",
+      ].some(k => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      
+      if (hasExplicitSaveKeyword || savePatternsRegex.test(rawSpeech)) {
+        console.log(`   ✅ CLARIFY: EXPLICIT save/register intent detected → DIRECT SAVE (no confirmation)`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        console.log(`   📤 PROCEEDING: Auto-submit without question`);
+        await _submitAndClose(twiml, callData, CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
+      // BUG FIX: First check for "just save this" phrases (meaning NO to explain) — DO THIS BEFORE CAPTURING LONG CONTENT
+      const justSaveKeywords = [
+        "बस यही",          // bas yehi = just this
+        "बस इतना",         // bas itna = just this much
+        "बस इतना ही",      // bas itna hi = just this much (emphatic)
+        "बस से",           // bas se = just from/this
+        "बस से कर दो",     // bas se kar do = just file it
+        "डिटेल से",        // detail se = with these details
+        "save kar do",      // save this
+        "सेव कर दो",       // save kar do (Hindi)
+        "save kar lo",      // save it (casual)
+        "सेव कर लो",       // save kar lo (Hindi casual)
+        "save complaint",   // save complaint
+        "complaint save",   // complaint save
+        "दर्ज कर दो",       // darz kar do (file it)
+        "दर्ज कर लो",       // darz kar lo (file it casual)
+        "बस दर्ज",         // bas darz = just file
+        "complaint दर्ज",   // complaint file it
+        "दर्ज complaint",   // file it complaint
+        "just save",        // just save
+        "इसी से काफी",     // this is enough
+        "इतना काफी",      // itna kafi = enough
+        "रजिस्टर करो",     // register karo = register it
+        "रजिस्टर कर दो",   // register kar do (Hindi)
+        "रजिस्टर कर लो",   // register kar lo (Hindi casual)
+        "register karo",    // register it (Roman)
+        "register kar do",  // register kar do (Roman)
+        "register kar lo",  // register kar lo (Roman casual)
+        "register complaint", // register complaint
+        "complaint register", // complaint register
+        "नहीं बताना",      // nahi batana = don't want to explain
+        "कुछ नहीं बताना",  // kuch nahi batana = don't want to explain anything
+        "no more explanation", // no more explanation
+        "बस इसी से",       // bas isi se = just with this
+      ];
+      
+      const isJustSaveIntent = justSaveKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
+      if (isJustSaveIntent) {
+        console.log(`   ✅ CLARIFY: "Just save this" phrase detected → DIRECT SAVE (no more questions)`);
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        // NO summary question - just auto-submit
+        console.log(`   📤 PROCEEDING: Auto-submit without question`);
+        await _submitAndClose(twiml, callData, CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       // FIX 5: If customer is already explaining (long answer with complaints), capture it directly
       const hasComplaintContent = detectAllComplaints(rawSpeech).length > 0 || rawSpeech.length > 30;
       if (hasComplaintContent) {
@@ -4297,31 +4527,6 @@ router.post("/process", async (req, res) => {
         callData.lastQuestion = "Theek hai. Aur bhi kuch hai machine ke baare mein? Ya bas itna hi?";
         ask(twiml, callData.lastQuestion);
         activeCalls.set(CallSid, callData);
-        return res.type("text/xml").send(twiml.toString());
-      }
-
-      // BUG FIX: First check for "just save this" phrases (meaning NO to explain)
-      const justSaveKeywords = [
-        "बस यही",          // bas yehi = just this
-        "बस इतना",         // bas itna = just this much
-        "बस से",           // bas se = just from/this
-        "डिटेल से",        // detail se = with these details
-        "save kar do",      // save this
-        "सेव कर दो",       // save kar do
-        "दर्ज कर दो",       // darz kar do (file it)
-        "बस दर्ज",         // bas darz = just file
-        "just save",        // just save
-        "इसी से काफी",     // this is enough
-      ];
-      
-      const isJustSaveIntent = justSaveKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
-      if (isJustSaveIntent) {
-        console.log(`   ✅ CLARIFY: "Just save this" phrase detected → direct save`);
-        callData.step = "final_confirmation";
-        callData.retries = 0;
-        // NO summary question - just auto-submit
-        console.log(`   📤 PROCEEDING: Auto-submit without question`);
-        await _submitAndClose(twiml, callData, CallSid);
         return res.type("text/xml").send(twiml.toString());
       }
 
@@ -4395,6 +4600,19 @@ router.post("/process", async (req, res) => {
       }
       // ── End CI Handler ──
 
+      // BUG FIX #5: Check for refusal to explain (wants engineer/mechanic instead)
+      const isRefusing = EXPLANATION_REFUSAL_PATTERNS.some((pattern) => 
+        rawSpeech.toLowerCase().includes(pattern.toLowerCase())
+      );
+      if (isRefusing) {
+        console.log(`   ⚠️ EXPLAIN_COMPLAINT: Customer refusing to explain (wants engineer/mechanic) → skip explanation, submit now`);
+        callData.rawComplaint = callData.rawComplaint + " [NO DETAILED EXPLANATION PROVIDED - Customer refused]";
+        callData.step = "final_confirmation";
+        callData.retries = 0;
+        await _submitAndClose(twiml, callData, CallSid);
+        return res.type("text/xml").send(twiml.toString());
+      }
+
       // Capture explanation details
       if (rejectInvalid(rawSpeech)) {
         callData.retries = (callData.retries || 0) + 1;
@@ -4458,6 +4676,7 @@ router.post("/process", async (req, res) => {
         "बस इतना ही", 
         "नहीं कुछ और",
         "और कुछ नहीं",
+        "बस से कर दो",
         "यही है",
         "बस",
         "खत्म हो गया",
