@@ -1511,6 +1511,10 @@ const complaintMap = {
     keywords: [
       // Hindi
       "स्टार्ट नहीं",
+      "मशीन का स्टार्ट",
+      "मशीन का स्टार्ट नहीं",
+      "ए मशीन चल रही है।",
+      "मशीन चल ",
       "चल नहीं",
       "चालू नहीं",
       "शुरू नहीं",
@@ -3886,7 +3890,9 @@ router.post("/process", async (req, res) => {
         "register kar",   // register it
         "register karo",  // register it
         "दर्ज कर",       // darz kar = file it
-        "बस से कर",      // bas se kar = just file it
+        "बस से कर",  
+        "बस",
+        "बस इतनी"    // bas se kar = just file it
       ];
       const shouldSkipPhone = skipPhoneKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
       if (shouldSkipPhone) {
@@ -4429,7 +4435,14 @@ router.post("/process", async (req, res) => {
         "दर्ज कर दो",      // darz kar do
         "दर्ज कर लो",      // darz kar lo
         "register kar",    // register kar
-        "register karo",   // register karo
+        "register karo",
+        "बस इतनी",
+        "बस",
+        "प्रॉब्लम सेट कर दो",
+        "सेट कर दो",
+        "प्रॉब्लम",
+        "कर दो"
+           // register karo
       ];
       const isSaveComplaintIntent = saveComplaintKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
       if (isSaveComplaintIntent) {
@@ -4525,6 +4538,16 @@ router.post("/process", async (req, res) => {
         "save kar",
         "register kar",
         "दर्ज कर",
+        "प्रॉब्लम सेट कर दो",
+        "प्रॉब्लम",
+        "सेट कर दो",
+        "बस इतनी",
+        "बस इतनी ही",
+        "बस",
+        "कर दो",
+        "बस इतना ही",
+        "बस इतना",
+        "बस से",
       ].some(k => rawSpeech.toLowerCase().includes(k.toLowerCase()));
       
       if (hasExplicitSaveKeyword || savePatternsRegex.test(rawSpeech)) {
@@ -4539,7 +4562,17 @@ router.post("/process", async (req, res) => {
       // BUG FIX: First check for "just save this" phrases (meaning NO to explain) — DO THIS BEFORE CAPTURING LONG CONTENT
       const justSaveKeywords = [
         "बस यही",          // bas yehi = just this
-        "बस इतना",         // bas itna = just this much
+        "बस इतना",
+        "प्रॉब्लम सेट कर दो",
+        "प्रॉब्लम",
+        "सेट कर दो",
+        "बस इतनी",
+        "बस इतनी ही",
+        "बस",
+        "कर दो",
+        "बस इतना ही",
+        "बस इतना",
+        "बस से",         // bas itna = just this much
         "बस इतना ही",      // bas itna hi = just this much (emphatic)
         "बस से",           // bas se = just from/this
         "बस से कर दो",     // bas se kar do = just file it
@@ -4783,6 +4816,16 @@ router.post("/process", async (req, res) => {
         "यही है",
         "बस",
         "खत्म हो गया",
+        "प्रॉब्लम सेट कर दो",
+        "प्रॉब्लम",
+        "सेट कर दो",
+        "बस इतनी",
+        "बस इतनी ही",
+        "बस",
+        "कर दो",
+        "बस इतना ही",
+        "बस इतना",
+        "बस से",
         "बात खत्म",
         "इतना काफी",
         "that's all",
