@@ -15,10 +15,10 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const activeCalls = new Map();
 
 /* ======================= EXTERNAL API CONFIG ======================= */
-// const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
-// const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
-const EXTERNAL_API_BASE = "http://192.168.1.6/jcbServiceEnginerAPIv7";
-const COMPLAINT_API_URL = "http://192.168.1.6/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+const EXTERNAL_API_BASE = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7";
+const COMPLAINT_API_URL = "http://gprs.rajeshmotors.com/jcbServiceEnginerAPIv7/ai_call_complaint.php";
+// const EXTERNAL_API_BASE = "http://192.168.1.6/jcbServiceEnginerAPIv7";
+// const COMPLAINT_API_URL = "http://192.168.1.6/jcbServiceEnginerAPIv7/ai_call_complaint.php";
 const API_TIMEOUT = 20000;
 const API_HEADERS = { JCBSERVICEAPI: "MakeInJcb" };
 
@@ -911,6 +911,73 @@ const negativeKeywords = [
   "not ready",
   "not prepared",
   "not confirmed",
+  // ═══ GRAMMATICAL VARIATIONS OF "बताना" (to tell) - for "don't want to explain" ═══
+  // Infinitive forms
+  "नहीं बताना",      // nahi batana = don't want to explain
+  "कुछ नहीं बताना",  // kuch nahi batana = don't want to explain anything
+  "बताना नहीं",      // batana nahi = no explanation
+  // Feminine forms (most common in spoken Hindi)
+  "नहीं बतानी",      // nahi btani = don't want to tell (feminine)
+  "कुछ नहीं बतानी",  // kuch nahi btani = nothing to tell (feminine)
+  "बतानी नहीं",      // btani nahi = (don't) tell (feminine)
+  // Future forms
+  "नहीं बताऊंगा",    // nahi bataunga = won't tell (masc)
+  "नहीं बताऊंगी",    // nahi bataungi = won't tell (fem)
+  "बताऊंगा नहीं",    // bataunga nahi = won't tell
+  "बताऊंगी नहीं",    // bataungi nahi = won't tell (fem)
+  // Oblique & other forms
+  "नहीं बताने",      // nahi batane = don't tell (oblique)
+  "बताने नहीं",      // batane nahi = tell—no
+  // Alternative forms
+  "मत बताना",       // mat batana = don't tell
+  "मत बतानी",       // mat btani = don't tell (fem)
+  "न बताना",        // na batana = don't tell (alt)
+  "न बतानी",        // na btani = don't tell (alt fem)
+  // ═══ SHORT CLOSING RESPONSE PHRASES ═══
+  "बस",            // bas = just/that's it
+  "बस इतना",       // bas itna = just this much
+  "बस इतना ही",    // bas itna hi = just this much (emphatic)
+  "बस बस",         // bas bas = enough
+  "बस है",         // bas hai = that's all
+  "उतना ही",       // utna hi = just that much
+  "इतना ही",       // itna hi = just this much
+  "इतनी ही",       // itni hi = just this much (fem)
+  "बस तो",         // bas to = just that
+  "आ गया",         // a gaya = it's done
+  "हो गया",        // ho gaya = it's done
+  "बस हो गया",     // bas ho gaya = that's enough
+  // ═══ "NO MORE" / "NOTHING ELSE" PHRASES ═══
+  "और नहीं",       // aur nahi = no more
+  "और कुछ नहीं",   // aur kuch nahi = nothing more
+  "कुछ और नहीं",   // kuch aur nahi = nothing else
+  "बाकी नहीं",      // baki nahi = no rest
+  "और बाकी नहीं",  // aur baki nahi = no more rest
+  "बाकी कुछ नहीं",  // baki kuch nahi = nothing left
+  "बाकी और नहीं",  // baki aur nahi = no more left
+  "कोई और नहीं",   // koi aur nahi = no one else/nothing else
+  "अन्य नहीं",     // anya nahi = no other
+  "कोई अन्य नहीं", // koi anya nahi = no other
+  "कुछ नहीं",      // kuch nahi = nothing
+  // ═══ PHONETIC/HINGLISH VARIATIONS ═══
+  "bas",
+  "bas itna",
+  "bas itna hi",
+  "bas to",
+  "itna hi",
+  "itni hi",
+  "aur nahi",
+  "aur kuch nahi",
+  "btani",
+  "btana",
+  "nahi btani",
+  "nahi btana",
+  "kuch nahi btani",
+  "kuch nahi btana",
+  "bat nahi",
+  "batana nahi",
+  "bas save kar do",
+  "बस सेव कर दो",
+  "बस कर दो",
 ];
 
 // Phrases where "nahi" appears BUT the intent is actually to confirm/accept
@@ -3138,8 +3205,8 @@ async function saveComplaint(callData) {
       to_time: callData.toTime || "",
       job_open_lat: lat,
       job_open_lng: lng,
-      job_close_lat: 0,
-      job_close_lng: 0,
+      job_close_lat: null,
+      job_close_lng: null,
     };
 
     return await submitComplaintToExternal(payload);
@@ -4499,10 +4566,46 @@ router.post("/process", async (req, res) => {
         "register kar lo",  // register kar lo (Roman casual)
         "register complaint", // register complaint
         "complaint register", // complaint register
-        "नहीं बताना",      // nahi batana = don't want to explain
-        "कुछ नहीं बताना",  // kuch nahi batana = don't want to explain anything
         "no more explanation", // no more explanation
         "बस इसी से",       // bas isi se = just with this
+        // ═══ GRAMMATICAL VARIATIONS OF "बताना" (to tell) ═══
+        // Infinitive forms
+        "नहीं बताना",      // nahi batana = don't want to explain
+        "कुछ नहीं बताना",  // kuch nahi batana = don't want to explain anything
+        "बताना नहीं",      // batana nahi = explaining—no
+        "कोई बताना नहीं",  // koi batana nahi = have nothing to tell
+        // Feminine forms
+        "नहीं बतानी",      // nahi btani = don't want to tell (feminine)
+        "कुछ नहीं बतानी",  // kuch nahi btani = nothing to tell (feminine)
+        "बतानी नहीं",      // btani nahi = (don't) tell—no (feminine)
+        // Future forms
+        "नहीं बताऊंगा",    // nahi bataunga = won't tell (masc future)
+        "नहीं बताऊंगी",    // nahi bataungi = won't tell (fem future)
+        "बताऊंगा नहीं",    // bataunga nahi = won't tell (masc future alt)
+        "बताऊंगी नहीं",    // bataungi nahi = won't tell (fem future alt)
+        // Oblique/other forms
+        "नहीं बताने",      // nahi batane = don't tell (oblique)
+        "कुछ नहीं बताने",  // kuch nahi batane = nothing to tell (oblique)
+        "बताने नहीं",      // batane nahi = tell—no (oblique)
+        // Alternative forms
+        "मत बताना",       // mat batana = don't tell (prohibition)
+        "मत बतानी",       // mat btani = don't tell (fem prohibition)
+        "न बताना",        // na batana = don't tell (alt prohibition)
+        "भी नहीं बताना",  // bhi nahi batana = also don't tell
+        // ═══ SHORT RESPONSE PHRASES ═══
+        "उतना ही",        // utna hi = just that much
+        "इतनी ही",        // itni hi = just this much (fem)
+        "और नहीं",        // aur nahi = no more
+        "और कुछ नहीं",    // aur kuch nahi = nothing more
+        "कुछ और नहीं",    // kuch aur nahi = nothing else
+        "बाकी नहीं",       // baki nahi = no rest
+        "और बाकी नहीं",   // aur baki nahi = no more rest
+        "बाकी कुछ नहीं",   // baki kuch nahi = nothing else
+        "कोई और नहीं",    // koi aur nahi = no one else/nothing else
+        "अन्य नहीं",      // anya nahi = no other
+        "बस है",          // bas hai = that's it
+        "बस बस",         // bas bas = enough enough
+        "हो गया बताना",  // ho gaya batana = done telling
       ];
       
       const isJustSaveIntent = justSaveKeywords.some((k) => rawSpeech.toLowerCase().includes(k.toLowerCase()));
